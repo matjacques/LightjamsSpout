@@ -1,5 +1,5 @@
 # LightjamsSpout
-COM wrapper for Spout making it usable in c# and any .Net in general
+COM wrapper for Spout making it usable in c# and .Net in general.
 
 Spout is a realtime video sharing framework for Windows. This COM object lets you easily create a Spout receiver in c#.
 
@@ -38,7 +38,7 @@ catch(System.Runtime.InteropServices.COMException e)
 
 Receive images
 
-You need to receive images always on the same thread. The Connect method can be called on a different thread, but once you start calling ReceiveImage, always use the same thread.
+Always receive images on the same thread. The Connect method can be called on a different thread, but once you start calling ReceiveImage, always use the same thread.
 
 ```
 // initialization
