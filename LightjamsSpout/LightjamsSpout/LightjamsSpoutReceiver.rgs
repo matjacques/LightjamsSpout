@@ -1,0 +1,16 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {9DE4149A-24CF-4B37-87EE-399005BC8997} = s 'LightjamsSpoutReceiver Class'
+		{
+			ForceRemove Programmable
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Free'
+			}
+			TypeLib = s '{E68A5E84-367B-46F2-BB45-EEC2E6C0D62B}'
+			Version = s '1.0'
+		}
+	}
+}

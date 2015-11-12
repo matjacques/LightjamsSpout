@@ -1,0 +1,103 @@
+// LightjamsSpout.idl : IDL source for LightjamsSpout
+//
+
+// This file will be processed by the MIDL tool to
+// produce the type library (LightjamsSpout.tlb) and marshalling code.
+
+/**
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Copyright (c) 2015, Mathieu Jacques, Lightjams inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"	AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE	ARE DISCLAIMED.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+========================
+
+*/
+
+import "oaidl.idl";
+import "ocidl.idl";
+
+[
+	object,
+	uuid(a817e7a2-43fa-11d0-9e44-00aa00b6770a),
+	dual,	
+	pointer_default(unique)
+]
+interface IComponentRegistrar : IDispatch
+{
+	[id(1)]	HRESULT Attach([in] BSTR bstrPath);
+	[id(2)]	HRESULT RegisterAll();
+	[id(3)]	HRESULT UnregisterAll();
+	[id(4)]	HRESULT GetComponents([out] SAFEARRAY(BSTR)* pbstrCLSIDs, [out] SAFEARRAY(BSTR)* pbstrDescriptions);
+	[id(5)]	HRESULT RegisterComponent([in] BSTR bstrCLSID);
+	[id(6)] HRESULT UnregisterComponent([in] BSTR bstrCLSID);
+};
+
+typedef[uuid(e0b1aa5b-145f-3b3a-c88f-d7cde058e301)] enum EPixelFormat
+{
+	BGR,
+	RGB
+} EPixelFormat;
+
+
+[
+	object,
+	uuid(83A7DAD1-813D-4B00-B849-946EEF9E35BC),
+	dual,
+	nonextensible,
+	pointer_default(unique)
+]
+interface ILightjamsSpoutReceiver : IDispatch{
+
+	[id(1), helpstring("Return the number of senders")]	HRESULT NbSenders([out, retval] int *count);
+	[id(2), helpstring("Get sender info or throw if not found")]	HRESULT GetSenderInfo([in] int index, [out] BSTR *name, [out] int *width, [out] int *height);
+	[id(3), helpstring("Connect to a sender - use empty string for the active sender. Throw if the sender is not found. Return the name of the connected sender.")]	HRESULT Connect([in] BSTR senderName, [out] int *width, [out] int *height, [out, retval] BSTR *realName);
+	[id(4), helpstring("Get the bytes of the current image and copy it in your buffer. Always call this method from the same thread otherwise it will crash.")] HRESULT ReceiveImage([in, out] SAFEARRAY(BYTE) bytes, [in] EPixelFormat format);
+	[id(5)] HRESULT Disconnect();
+	
+};
+[
+	uuid(E68A5E84-367B-46F2-BB45-EEC2E6C0D62B),
+	version(1.33),
+	custom(a817e7a1-43fa-11d0-9e44-00aa00b6770a,"{A99139BB-C23B-41FC-B7D5-BE16D564FFC2}")
+]
+library LightjamsSpoutLib
+{
+	importlib("stdole2.tlb");
+	[
+		uuid(A99139BB-C23B-41FC-B7D5-BE16D564FFC2)		
+	]
+	coclass CompReg
+	{
+		[default] interface IComponentRegistrar;
+	};
+
+	enum EPixelFormat;
+
+	[
+		uuid(9DE4149A-24CF-4B37-87EE-399005BC8997)		
+	]
+	coclass LightjamsSpoutReceiver
+	{
+		[default] interface ILightjamsSpoutReceiver;
+	};
+};
+
