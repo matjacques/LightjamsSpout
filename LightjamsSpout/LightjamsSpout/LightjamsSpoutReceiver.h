@@ -28,7 +28,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 #include "resource.h"       // main symbols
-#include "SpoutReceiver.h"
+
+#include "..\..\SpoutSDK\Spout.h"
 
 
 #include "LightjamsSpout_i.h"
@@ -83,12 +84,13 @@ public:
 
 private:
 	void InitOpenGL();
+	void InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height);
 
 	SpoutReceiver _receiver;
 	bool _isCreated;
 	int _width, _height;	
 	char _senderName[256];
-
+	GLuint _glTexture;
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(LightjamsSpoutReceiver), CLightjamsSpoutReceiver)

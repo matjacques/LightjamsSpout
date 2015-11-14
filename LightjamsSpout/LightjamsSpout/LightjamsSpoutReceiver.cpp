@@ -35,6 +35,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 CLightjamsSpoutReceiver::CLightjamsSpoutReceiver()
 {
 	_isCreated = false;	
+	_glTexture = 0;
+
 }
 
 CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
@@ -44,16 +46,28 @@ CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
 
 STDMETHODIMP CLightjamsSpoutReceiver::Disconnect()
 {
+	// the clean-up order is important!
+	// start with the OpenGl context otherwise
+	// the app freezes
+
+	HGLRC ctx = wglGetCurrentContext();
+	if (ctx != NULL)
+	{
+		wglDeleteContext(ctx);
+	}
+
 	if (_isCreated)
 	{
 		_receiver.ReleaseReceiver();		
 		_isCreated = false;
 	}
 
-	HGLRC ctx = wglGetCurrentContext();
-	if (ctx != NULL) {
-		wglDeleteContext(ctx);
-	}	
+	if (_glTexture != 0)
+	{
+		glDeleteTextures(1, &_glTexture);
+		_glTexture = 0;
+	}
+
 
 	return S_OK;
 }
@@ -144,6 +158,23 @@ void CLightjamsSpoutReceiver::InitOpenGL()
 		}
 	}
 	
+}
+
+void CLightjamsSpoutReceiver::InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height)
+{
+
+	// Create a texture buffer
+	if (texID != 0) glDeleteTextures(1, &texID);
+	glGenTextures(1, &texID);
+
+	glBindTexture(GL_TEXTURE_2D, texID);
+	glTexImage2D(GL_TEXTURE_2D, 0, GLformat, width, height, 0, GLformat, GL_UNSIGNED_BYTE, NULL);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
 }
 
 STDMETHODIMP CLightjamsSpoutReceiver::NbSenders(int *pCount)
@@ -246,7 +277,10 @@ STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImage(SAFEARRAY *bytes, EPixelForma
 			{
 				return Error(_T("ERROR_CREATE_RECEIVER"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);				
 			}
-			
+
+			// the texture's format must be RGB. Creating with BGR gives blank images...
+			InitTexture(_glTexture, GL_RGB, _width, _height); // RGB texture the size of the caller's image
+
 			_isCreated = true;			
 		}
 		catch (const std::exception &e)
@@ -269,7 +303,7 @@ STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImage(SAFEARRAY *bytes, EPixelForma
 
 	byte* resultArray = (byte*)bytes->pvData;
 	
-	if (_receiver.ReceiveImage(_senderName, w, h, resultArray, GL_RGB))
+	if(_receiver.ReceiveTexture(_senderName, w, h, _glTexture, GL_TEXTURE_2D)) 
 	{
 		if (w != _width || h != _height)
 		{
@@ -278,23 +312,14 @@ STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImage(SAFEARRAY *bytes, EPixelForma
 		}
 		else
 		{			
-			if (format == EPixelFormat::BGR)
-			{				
-				// swap the r and b in the rgb
-				byte* dst = resultArray;
-
-				size_t nbPixels = _width * _height;
-				for (size_t i = 0; i < nbPixels; ++i) {
-
-					byte temp = *dst;
-					*dst = *(dst + 2);
-					*(dst + 2) = temp;
-
-					dst += 3;
-				}
-			}
+			GLenum glFormat = (format == EPixelFormat::RGB) ? GL_RGB : GL_BGR;
+			glBindTexture(GL_TEXTURE_2D, _glTexture);
+			glEnable(GL_TEXTURE_2D);
+			glGetTexImage(GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, (void *)resultArray);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glDisable(GL_TEXTURE_2D);
 		}
-	}
+	}	
 	else
 	{
 		return Error(_T("ERROR_SENDER_NOT_FOUND"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
