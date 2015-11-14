@@ -50,7 +50,10 @@ try
 	// the senderName as retrieved when enumerating senders or "" to use the active sender
 	m_receiver.Connect(senderName, out m_width, out m_height);
 	m_bitmap = new Bitmap(m_width, m_height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-	m_buffer = new byte[m_width * m_height * 3];	
+	
+	const int bytesPerPixel = 3;	// RGB
+    int stride = 4 * ((m_width * bytesPerPixel + 3) / 4);
+    m_buffer = new byte[stride * m_height];	
 }
 catch(System.Runtime.InteropServices.COMException e)
 {

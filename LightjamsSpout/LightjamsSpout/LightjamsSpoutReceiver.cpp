@@ -296,9 +296,13 @@ STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImage(SAFEARRAY *bytes, EPixelForma
 		return Error(_T("ERROR_ARRAY_MUST_BE_ONE_DIMENSION"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
 	}
 
-	if (bytes->rgsabound[0].cElements < _width * _height * 3)
+	// for .Net and (by default) for OpenGL, each bitmap row must be aligned to a 4 byte boundary
+	const int bytesPerPixel = 3;	// RGB
+	int stride = 4 * ((_width * bytesPerPixel + 3) / 4);
+
+	if (bytes->rgsabound[0].cElements < stride * _height)
 	{
-		return Error(_T("ERROR_ARRAY_TOO_SMALL_FOR_RGB"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+		return Error(_T("ERROR_ARRAY_TOO_SMALL"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
 	}
 
 	byte* resultArray = (byte*)bytes->pvData;
