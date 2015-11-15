@@ -106,6 +106,7 @@ catch(System.Runtime.InteropServices.COMException e)
 
 Alternatively, you can pass a pointer to the bitmap data directly if you don't want to do anything with the bytes yourself:
 
+```
 try
 {
 	var data = m_bitmap.LockBits(new Rectangle(0, 0, m_width, m_height), System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
