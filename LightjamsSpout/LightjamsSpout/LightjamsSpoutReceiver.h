@@ -84,17 +84,57 @@ END_COM_MAP()
 public:
 
 private:
-	void InitOpenGL();
-	GLuint CreateTexture(GLenum GLformat, unsigned int width, unsigned int height);
-	void ReceiveImage(void* buffer, EPixelFormat format);
+
+	class ScopedCriticalSection
+	{
+	public:
+		ScopedCriticalSection(LPCRITICAL_SECTION handle)
+		{
+			_handle = handle;
+			EnterCriticalSection(handle);
+		}
+
+		~ScopedCriticalSection()
+		{
+			LeaveCriticalSection(_handle);
+		}
+
+	private:
+		LPCRITICAL_SECTION  _handle;
+	};
+	
+	struct STextureInfo
+	{
+		STextureInfo() : 
+			glContext(0), ID(0)
+		{}
+
+		HGLRC glContext;
+		GLuint ID;
+		int width, height;
+		GLenum format;
+	};
+	
+	STextureInfo AcquireTexture(GLenum GLformat, unsigned int width, unsigned int height);	
+	void ReceiveImage(void* buffer, EPixelFormat format);	
 
 	SpoutReceiver _receiver;
 	bool _isCreated;
 	int _width, _height;	
-	char _senderName[256];
-	GLuint _glTexture;
-	HDC _hdc;
-	HGLRC _glContext;
+	char _senderName[256];	
+	STextureInfo _textureInfo;
+
+	// Reuse textures across receivers to save resources
+	static CRITICAL_SECTION _texturesLock;
+	static std::vector<STextureInfo> _textures;	
+
+	static CRITICAL_SECTION InitCriticalSection()
+	{
+		CRITICAL_SECTION section;
+		InitializeCriticalSectionAndSpinCount(&section, 0x00000400);
+		return section;
+	}
+
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(LightjamsSpoutReceiver), CLightjamsSpoutReceiver)
