@@ -124,3 +124,59 @@ catch(System.Runtime.InteropServices.COMException e)
 ## Handle exceptions
 
 The COM object will throw exceptions if something is wrong. For example, if the sender is gone, you'll get the string ERROR_SENDER_NOT_FOUND. If the image's size changed, you'll get the string SIZE_CHANGED. In most cases, for robustness and simplicity sake, you should destruct the COM object, create a new object and connect again. 
+
+## Deployment
+
+The best way to deploy the COM object with your application is to add some info to your application manifest file in order to use LightjamsSpout as a registration-free COM. This way, the user installing your app doesn't need to be an administrator and there's no chance of conflict with another installed app using another version of LightjamsSpout.
+
+Don't forget to bundle the right file version (32 or 64 bit) to fit your project.
+
+A typical application manifest with proper dependency info looks like this:
+
+```
+<?xml version="1.0" encoding="utf-8"?>
+<asmv1:assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv1="urn:schemas-microsoft-com:asm.v1" xmlns:asmv2="urn:schemas-microsoft-com:asm.v2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <assemblyIdentity version="1.0.0.0" name="MyApplication.app"/>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">        
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- A list of all Windows versions that this application is designed to work with. 
+      Windows will automatically select the most compatible environment.-->
+
+      <!-- If your application is designed to work with Windows Vista, uncomment the following supportedOS node-->
+      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"></supportedOS>
+
+      <!-- If your application is designed to work with Windows 7, uncomment the following supportedOS node-->
+      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
+
+      <!-- If your application is designed to work with Windows 8, uncomment the following supportedOS node-->
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"></supportedOS>
+
+      <!-- If your application is designed to work with Windows 8.1, uncomment the following supportedOS node-->
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
+
+    </application>
+  </compatibility>
+
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32"
+                        name="LightjamsSpout"
+                        version="1.0.0.9"                        
+                        language="*"/>
+
+    </dependentAssembly>
+
+  </dependency>
+
+  
+</asmv1:assembly>
+
+```
