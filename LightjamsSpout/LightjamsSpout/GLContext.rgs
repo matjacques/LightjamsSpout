@@ -1,0 +1,16 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {A613DC0B-B1D6-41C8-B714-4BD7116560EB} = s 'GLContext Class'
+		{
+			ForceRemove Programmable
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Free'
+			}
+			TypeLib = s '{E68A5E84-367B-46F2-BB45-EEC2E6C0D62B}'
+			Version = s '1.41'
+		}
+	}
+}
