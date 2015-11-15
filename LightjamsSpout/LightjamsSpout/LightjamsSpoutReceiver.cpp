@@ -33,10 +33,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // CLightjamsSpoutReceiver
 
 CLightjamsSpoutReceiver::CLightjamsSpoutReceiver()
-{
+{	
 	_isCreated = false;	
 	_glTexture = 0;
-
+	_glContext = 0;
+	_hdc = 0;
 }
 
 CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
@@ -46,23 +47,28 @@ CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
 
 STDMETHODIMP CLightjamsSpoutReceiver::Disconnect()
 {	
-	/* Deleting the texture crashes on some computers... Disabled until a workaround is found.
+	if (_hdc != 0)
+	{	
+		wglMakeCurrent(_hdc, 0);
+	}
+
 	if (_glTexture != 0)
 	{
 		glDeleteTextures(1, &_glTexture);
 		_glTexture = 0;
 	}
-	*/
 	
-	HGLRC ctx = wglGetCurrentContext();
-	if (ctx != NULL)
-	{
-		wglDeleteContext(ctx);
-	}
+	if (_glContext != 0)
+	{	
+		wglDeleteContext(_glContext);
+		_glContext = 0;
+	}	
+	
+	_hdc = 0;
 	
 	if (_isCreated)
 	{
-		_receiver.ReleaseReceiver();		
+		_receiver.ReleaseReceiver();
 		_isCreated = false;
 	}
 
@@ -113,6 +119,8 @@ void CLightjamsSpoutReceiver::InitOpenGL()
 			throw std::exception("ERROR_OPEN_GL_NO_WINDOW");			
 		}
 
+		
+		
 		hdc = GetDC(hwndButton);
 		if (!hdc) {
 			// printf("InitOpenGL error 2\n"); 
@@ -154,13 +162,16 @@ void CLightjamsSpoutReceiver::InitOpenGL()
 			throw std::exception("ERROR_OPEN_GL_NO_CURRENT_CONTEXT");
 		}
 	}
-	
+
+	_glContext = hRc;
+	_hdc = hdc;	
 }
 
-void CLightjamsSpoutReceiver::InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height)
+GLuint CLightjamsSpoutReceiver::CreateTexture(GLenum GLformat, unsigned int width, unsigned int height)
 {
-	// Create a texture buffer
-	if (texID != 0) glDeleteTextures(1, &texID);
+	GLuint texID;
+
+	// Create a texture buffer	
 	glGenTextures(1, &texID);
 
 	if (texID == 0)
@@ -176,6 +187,7 @@ void CLightjamsSpoutReceiver::InitTexture(GLuint &texID, GLenum GLformat, unsign
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glBindTexture(GL_TEXTURE_2D, 0);
 
+	return texID;
 }
 
 STDMETHODIMP CLightjamsSpoutReceiver::NbSenders(int *pCount)
@@ -314,7 +326,7 @@ void CLightjamsSpoutReceiver::ReceiveImage(void* buffer, EPixelFormat format)
 		InitOpenGL();
 
 		// the texture's format must be RGB. Creating with BGR gives blank images...
-		InitTexture(_glTexture, GL_RGB, _width, _height);
+		_glTexture = CreateTexture(GL_RGB, _width, _height);
 		
 		if (!_receiver.CreateReceiver(_senderName, w, h))
 		{

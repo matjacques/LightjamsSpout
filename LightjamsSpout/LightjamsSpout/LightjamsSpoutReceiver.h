@@ -85,7 +85,7 @@ public:
 
 private:
 	void InitOpenGL();
-	void InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height);
+	GLuint CreateTexture(GLenum GLformat, unsigned int width, unsigned int height);
 	void ReceiveImage(void* buffer, EPixelFormat format);
 
 	SpoutReceiver _receiver;
@@ -93,6 +93,8 @@ private:
 	int _width, _height;	
 	char _senderName[256];
 	GLuint _glTexture;
+	HDC _hdc;
+	HGLRC _glContext;
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(LightjamsSpoutReceiver), CLightjamsSpoutReceiver)
