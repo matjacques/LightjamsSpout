@@ -4,10 +4,10 @@
 
 
  /* File created by MIDL compiler version 8.00.0603 */
-/* at Sat Nov 14 09:50:21 2015
+/* at Sat Nov 14 17:54:10 2015
  */
 /* Compiler settings for LightjamsSpout.idl:
-    Oicf, W1, Zp8, env=Win64 (32b run), target_arch=AMD64 8.00.0603 
+    Oicf, W1, Zp8, env=Win32 (32b run), target_arch=X86 8.00.0603 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
     VC __declspec() decoration level: 
@@ -319,6 +319,10 @@ EXTERN_C const IID IID_ILightjamsSpoutReceiver;
             /* [out][in] */ SAFEARRAY * bytes,
             /* [in] */ EPixelFormat format) = 0;
         
+        virtual /* [helpstring][id] */ HRESULT STDMETHODCALLTYPE ReceiveImageIntPtr( 
+            /* [in] */ LONG_PTR bitmapIntPtr,
+            /* [in] */ EPixelFormat format) = 0;
+        
         virtual /* [id] */ HRESULT STDMETHODCALLTYPE Disconnect( void) = 0;
         
     };
@@ -402,6 +406,11 @@ EXTERN_C const IID IID_ILightjamsSpoutReceiver;
             /* [out][in] */ SAFEARRAY * bytes,
             /* [in] */ EPixelFormat format);
         
+        /* [helpstring][id] */ HRESULT ( STDMETHODCALLTYPE *ReceiveImageIntPtr )( 
+            ILightjamsSpoutReceiver * This,
+            /* [in] */ LONG_PTR bitmapIntPtr,
+            /* [in] */ EPixelFormat format);
+        
         /* [id] */ HRESULT ( STDMETHODCALLTYPE *Disconnect )( 
             ILightjamsSpoutReceiver * This);
         
@@ -452,6 +461,9 @@ EXTERN_C const IID IID_ILightjamsSpoutReceiver;
 
 #define ILightjamsSpoutReceiver_ReceiveImage(This,bytes,format)	\
     ( (This)->lpVtbl -> ReceiveImage(This,bytes,format) ) 
+
+#define ILightjamsSpoutReceiver_ReceiveImageIntPtr(This,bitmapIntPtr,format)	\
+    ( (This)->lpVtbl -> ReceiveImageIntPtr(This,bitmapIntPtr,format) ) 
 
 #define ILightjamsSpoutReceiver_Disconnect(This)	\
     ( (This)->lpVtbl -> Disconnect(This) ) 

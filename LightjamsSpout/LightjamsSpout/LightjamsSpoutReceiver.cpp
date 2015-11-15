@@ -45,29 +45,26 @@ CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
 }
 
 STDMETHODIMP CLightjamsSpoutReceiver::Disconnect()
-{
-	// the clean-up order is important!
-	// start with the OpenGl context otherwise
-	// the app freezes
-
-	HGLRC ctx = wglGetCurrentContext();
-	if (ctx != NULL)
-	{
-		wglDeleteContext(ctx);
-	}
-
-	if (_isCreated)
-	{
-		_receiver.ReleaseReceiver();		
-		_isCreated = false;
-	}
-
+{	
+	/* Deleting the texture crashes on some computers... Disabled until a workaround is found.
 	if (_glTexture != 0)
 	{
 		glDeleteTextures(1, &_glTexture);
 		_glTexture = 0;
 	}
-
+	*/
+	
+	HGLRC ctx = wglGetCurrentContext();
+	if (ctx != NULL)
+	{
+		wglDeleteContext(ctx);
+	}
+	
+	if (_isCreated)
+	{
+		_receiver.ReleaseReceiver();		
+		_isCreated = false;
+	}
 
 	return S_OK;
 }
@@ -162,10 +159,14 @@ void CLightjamsSpoutReceiver::InitOpenGL()
 
 void CLightjamsSpoutReceiver::InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height)
 {
-
 	// Create a texture buffer
 	if (texID != 0) glDeleteTextures(1, &texID);
 	glGenTextures(1, &texID);
+
+	if (texID == 0)
+	{
+		throw std::exception("ERROR_INIT_TEXTURE");
+	}
 
 	glBindTexture(GL_TEXTURE_2D, texID);
 	glTexImage2D(GL_TEXTURE_2D, 0, GLformat, width, height, 0, GLformat, GL_UNSIGNED_BYTE, NULL);
@@ -264,70 +265,84 @@ STDMETHODIMP CLightjamsSpoutReceiver::Connect(BSTR senderName, int *width, int *
 
 STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImage(SAFEARRAY *bytes, EPixelFormat format)
 {	
-	if (!_isCreated)
-	{		
-		// It's important to create the OpenGL context in the same thread that will be using it later.
-		// Otherwise, it crashes at every OpenGL call!
-		try
+	try
+	{
+		if (bytes->cDims != 1)
 		{
-			InitOpenGL();
-		
-			unsigned int w = _width, h = _height;
-			if (!_receiver.CreateReceiver(_senderName, w, h))
-			{
-				return Error(_T("ERROR_CREATE_RECEIVER"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);				
-			}
-
-			// the texture's format must be RGB. Creating with BGR gives blank images...
-			InitTexture(_glTexture, GL_RGB, _width, _height); // RGB texture the size of the caller's image
-
-			_isCreated = true;			
+			return Error(_T("ERROR_ARRAY_MUST_BE_ONE_DIMENSION"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
 		}
-		catch (const std::exception &e)
+
+		// for .Net and (by default) for OpenGL, each bitmap row must be aligned to a 4 byte boundary
+		const int bytesPerPixel = 3;	// RGB
+		int stride = 4 * ((_width * bytesPerPixel + 3) / 4);
+
+		if (bytes->rgsabound[0].cElements < stride * _height)
 		{
-			return Error(e.what(), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
-		}
+			return Error(_T("ERROR_ARRAY_TOO_SMALL"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+		}		
+
+		ReceiveImage(bytes->pvData, format);
+		return S_OK;
+	}
+	catch (const std::exception &e)
+	{
+		return Error(e.what(), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
 	}	
+}
 
+STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImageIntPtr(LONG_PTR bitmapIntPtr, EPixelFormat format)
+{
+	try
+	{
+		ReceiveImage((void*)bitmapIntPtr, format);
+		return S_OK;
+	}
+	catch (const std::exception &e)
+	{
+		return Error(e.what(), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+	}
+}
+
+void CLightjamsSpoutReceiver::ReceiveImage(void* buffer, EPixelFormat format)
+{
 	unsigned int w = _width, h = _height;
 
-	if (bytes->cDims != 1)
+	if (!_isCreated)
 	{
-		return Error(_T("ERROR_ARRAY_MUST_BE_ONE_DIMENSION"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+		// It's important to create the OpenGL context in the same thread that will be using it later.
+		// Otherwise, it crashes at every OpenGL call!
+		InitOpenGL();
+
+		// the texture's format must be RGB. Creating with BGR gives blank images...
+		InitTexture(_glTexture, GL_RGB, _width, _height);
+		
+		if (!_receiver.CreateReceiver(_senderName, w, h))
+		{
+			throw std::exception("ERROR_CREATE_RECEIVER");			
+		}
+		
+		_isCreated = true;		
 	}
-
-	// for .Net and (by default) for OpenGL, each bitmap row must be aligned to a 4 byte boundary
-	const int bytesPerPixel = 3;	// RGB
-	int stride = 4 * ((_width * bytesPerPixel + 3) / 4);
-
-	if (bytes->rgsabound[0].cElements < stride * _height)
-	{
-		return Error(_T("ERROR_ARRAY_TOO_SMALL"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
-	}
-
-	byte* resultArray = (byte*)bytes->pvData;
 	
-	if(_receiver.ReceiveTexture(_senderName, w, h, _glTexture, GL_TEXTURE_2D)) 
+	if (_receiver.ReceiveTexture(_senderName, w, h, _glTexture, GL_TEXTURE_2D))
 	{
 		if (w != _width || h != _height)
 		{
 			// the caller needs to update his buffer... 
-			return Error(_T("SIZE_CHANGED"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+			throw std::exception("SIZE_CHANGED");			
 		}
 		else
-		{			
+		{
 			GLenum glFormat = (format == EPixelFormat::RGB) ? GL_RGB : GL_BGR;
 			glBindTexture(GL_TEXTURE_2D, _glTexture);
 			glEnable(GL_TEXTURE_2D);
-			glGetTexImage(GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, (void *)resultArray);
+			glGetTexImage(GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, buffer);
 			glBindTexture(GL_TEXTURE_2D, 0);
 			glDisable(GL_TEXTURE_2D);
 		}
-	}	
+	}
 	else
 	{
-		return Error(_T("ERROR_SENDER_NOT_FOUND"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
-	}
-
-	return S_OK;
+		throw std::exception("ERROR_SENDER_NOT_FOUND");		
+	}	
 }

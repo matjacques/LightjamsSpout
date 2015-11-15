@@ -68,6 +68,7 @@ END_COM_MAP()
 	STDMETHOD(Connect)(BSTR senderName, int *width, int *height, BSTR *realName);
 	STDMETHOD(Disconnect)();
 	STDMETHOD(ReceiveImage)(SAFEARRAY *bytes, EPixelFormat format);
+	STDMETHOD(ReceiveImageIntPtr)(LONG_PTR bitmapIntPtr, EPixelFormat format);
 
 	DECLARE_PROTECT_FINAL_CONSTRUCT()
 
@@ -85,6 +86,7 @@ public:
 private:
 	void InitOpenGL();
 	void InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height);
+	void ReceiveImage(void* buffer, EPixelFormat format);
 
 	SpoutReceiver _receiver;
 	bool _isCreated;
