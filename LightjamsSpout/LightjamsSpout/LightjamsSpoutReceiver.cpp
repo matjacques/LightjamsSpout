@@ -32,11 +32,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // CLightjamsSpoutReceiver
 
-CLightjamsSpoutReceiver::CLightjamsSpoutReceiver()
-{
-	_isCreated = false;	
-	_glTexture = 0;
+std::vector<CLightjamsSpoutReceiver::STextureInfo> CLightjamsSpoutReceiver::_textures = std::vector<CLightjamsSpoutReceiver::STextureInfo>();
 
+CRITICAL_SECTION CLightjamsSpoutReceiver::_texturesLock = CLightjamsSpoutReceiver::InitCriticalSection();
+
+CLightjamsSpoutReceiver::CLightjamsSpoutReceiver() : _isCreated(false)
+{	
+	_senderName[0] = 0;
 }
 
 CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
@@ -44,33 +46,6 @@ CLightjamsSpoutReceiver::~CLightjamsSpoutReceiver()
 	Disconnect();
 }
 
-STDMETHODIMP CLightjamsSpoutReceiver::Disconnect()
-{
-	// the clean-up order is important!
-	// start with the OpenGl context otherwise
-	// the app freezes
-
-	HGLRC ctx = wglGetCurrentContext();
-	if (ctx != NULL)
-	{
-		wglDeleteContext(ctx);
-	}
-
-	if (_isCreated)
-	{
-		_receiver.ReleaseReceiver();		
-		_isCreated = false;
-	}
-
-	if (_glTexture != 0)
-	{
-		glDeleteTextures(1, &_glTexture);
-		_glTexture = 0;
-	}
-
-
-	return S_OK;
-}
 
 STDMETHODIMP CLightjamsSpoutReceiver::InterfaceSupportsErrorInfo(REFIID riid)
 {
@@ -85,96 +60,6 @@ STDMETHODIMP CLightjamsSpoutReceiver::InterfaceSupportsErrorInfo(REFIID riid)
 			return S_OK;
 	}
 	return S_FALSE;
-}
-
-void CLightjamsSpoutReceiver::InitOpenGL()
-{
-	HDC hdc = NULL;
-	HWND hwnd = NULL;
-	HWND hwndButton = NULL;
-	HGLRC hRc = NULL;
-
-	HGLRC glContext = wglGetCurrentContext();
-
-	if (glContext == NULL) {
-
-		// We only need an OpenGL context with no render window because we don't draw to it
-		// so create an invisible dummy button window. This is then independent from the host
-		// program window (GetForegroundWindow). If SetPixelFormat has been called on the
-		// host window it cannot be called again. This caused a problem in Mapio.
-		// https://msdn.microsoft.com/en-us/library/windows/desktop/dd369049%28v=vs.85%29.aspx
-		//
-		if (!hwndButton || !IsWindow(hwndButton)) {
-			hwndButton = CreateWindowA("BUTTON",
-				"SpoutOpenGL",
-				WS_OVERLAPPEDWINDOW,
-				0, 0, 32, 32,
-				NULL, NULL, NULL, NULL);
-		}
-
-		if (!hwndButton) {
-			throw std::exception("ERROR_OPEN_GL_NO_WINDOW");			
-		}
-
-		hdc = GetDC(hwndButton);
-		if (!hdc) {
-			// printf("InitOpenGL error 2\n"); 
-			throw std::exception("ERROR_OPEN_GL_NO_DC");
-		}
-
-		PIXELFORMATDESCRIPTOR pfd;
-		ZeroMemory(&pfd, sizeof(pfd));
-		pfd.nSize = sizeof(pfd);
-		pfd.nVersion = 1;
-		pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-		pfd.iPixelType = PFD_TYPE_RGBA;
-		pfd.cColorBits = 32;
-		pfd.cDepthBits = 16;
-		pfd.iLayerType = PFD_MAIN_PLANE;
-		int iFormat = ChoosePixelFormat(hdc, &pfd);
-		if (!iFormat) {
-			// printf("InitOpenGL error 3\n"); 
-			throw std::exception("ERROR_OPEN_GL_NO_PIXEL_FORMAT");
-		}
-
-		if (!SetPixelFormat(hdc, iFormat, &pfd)) {
-			DWORD dwError = GetLastError();
-			// printf("InitOpenGL error 4 (Error %d (%x))\n", dwError, dwError); 
-			// 2000 (0x7D0) The pixel format is invalid.
-			// Caused by repeated call of  the SetPixelFormat function
-			throw std::exception("ERROR_OPEN_GL_SET_PIXEL_FORMAT");
-		}
-
-		hRc = wglCreateContext(hdc);
-		if (!hRc) {
-			// printf("InitOpenGL error 5\n"); 
-			throw std::exception("ERROR_OPEN_GL_CREATE_CONTEXT");
-		}
-
-		wglMakeCurrent(hdc, hRc);
-		if (wglGetCurrentContext() == NULL) {
-			// printf("InitOpenGL error 6\n");
-			throw std::exception("ERROR_OPEN_GL_NO_CURRENT_CONTEXT");
-		}
-	}
-	
-}
-
-void CLightjamsSpoutReceiver::InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height)
-{
-
-	// Create a texture buffer
-	if (texID != 0) glDeleteTextures(1, &texID);
-	glGenTextures(1, &texID);
-
-	glBindTexture(GL_TEXTURE_2D, texID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GLformat, width, height, 0, GLformat, GL_UNSIGNED_BYTE, NULL);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glBindTexture(GL_TEXTURE_2D, 0);
-
 }
 
 STDMETHODIMP CLightjamsSpoutReceiver::NbSenders(int *pCount)
@@ -214,7 +99,7 @@ STDMETHODIMP CLightjamsSpoutReceiver::Connect(BSTR senderName, int *width, int *
 	if (_isCreated)
 	{
 		return Error(_T("ERROR_ALREADY_CONNECTED"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
-	}
+	}	
 
 	std::string requestedName(_com_util::ConvertBSTRToString(senderName));
 	char name[256];
@@ -258,76 +143,151 @@ STDMETHODIMP CLightjamsSpoutReceiver::Connect(BSTR senderName, int *width, int *
 	*height = h;
 	strcpy_s(_senderName, 256, name);
 
+	return S_OK;	
+}
+
+STDMETHODIMP CLightjamsSpoutReceiver::Disconnect()
+{
+	if (_isCreated)
+	{
+		_receiver.ReleaseReceiver();
+		_isCreated = false;
+	}
+
 	return S_OK;
-	
 }
 
 STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImage(SAFEARRAY *bytes, EPixelFormat format)
 {	
-	if (!_isCreated)
-	{		
-		// It's important to create the OpenGL context in the same thread that will be using it later.
-		// Otherwise, it crashes at every OpenGL call!
-		try
+	try
+	{
+		if (bytes->cDims != 1)
 		{
-			InitOpenGL();
-		
-			unsigned int w = _width, h = _height;
-			if (!_receiver.CreateReceiver(_senderName, w, h))
-			{
-				return Error(_T("ERROR_CREATE_RECEIVER"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);				
-			}
-
-			// the texture's format must be RGB. Creating with BGR gives blank images...
-			InitTexture(_glTexture, GL_RGB, _width, _height); // RGB texture the size of the caller's image
-
-			_isCreated = true;			
+			return Error(_T("ERROR_ARRAY_MUST_BE_ONE_DIMENSION"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
 		}
-		catch (const std::exception &e)
+
+		// for .Net and (by default) for OpenGL, each bitmap row must be aligned to a 4 byte boundary
+		const int bytesPerPixel = 3;	// RGB
+		int stride = 4 * ((_width * bytesPerPixel + 3) / 4);
+
+		if (bytes->rgsabound[0].cElements < stride * _height)
 		{
-			return Error(e.what(), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
-		}
+			return Error(_T("ERROR_ARRAY_TOO_SMALL"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+		}		
+
+		ReceiveImage(bytes->pvData, format);
+		return S_OK;
+	}
+	catch (const std::exception &e)
+	{
+		return Error(e.what(), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
 	}	
+}
 
+STDMETHODIMP CLightjamsSpoutReceiver::ReceiveImageIntPtr(LONG_PTR bitmapIntPtr, EPixelFormat format)
+{
+	try
+	{
+		ReceiveImage((void*)bitmapIntPtr, format);
+		return S_OK;
+	}
+	catch (const std::exception &e)
+	{
+		return Error(e.what(), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+	}
+}
+
+void CLightjamsSpoutReceiver::ReceiveImage(void* buffer, EPixelFormat format)
+{
 	unsigned int w = _width, h = _height;
 
-	if (bytes->cDims != 1)
-	{
-		return Error(_T("ERROR_ARRAY_MUST_BE_ONE_DIMENSION"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+	if (!_isCreated)
+	{	
+		// the texture's format must be RGB. Creating with BGR gives blank images...
+		_textureInfo = AcquireTexture(GL_RGB, _width, _height);		
+		
+		if (!_receiver.CreateReceiver(_senderName, w, h))
+		{
+			throw std::exception("ERROR_CREATE_RECEIVER");			
+		}
+		
+		_isCreated = true;		
 	}
-
-	// for .Net and (by default) for OpenGL, each bitmap row must be aligned to a 4 byte boundary
-	const int bytesPerPixel = 3;	// RGB
-	int stride = 4 * ((_width * bytesPerPixel + 3) / 4);
-
-	if (bytes->rgsabound[0].cElements < stride * _height)
-	{
-		return Error(_T("ERROR_ARRAY_TOO_SMALL"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
-	}
-
-	byte* resultArray = (byte*)bytes->pvData;
 	
-	if(_receiver.ReceiveTexture(_senderName, w, h, _glTexture, GL_TEXTURE_2D)) 
+	if (_receiver.ReceiveTexture(_senderName, w, h, _textureInfo.ID, GL_TEXTURE_2D))
 	{
 		if (w != _width || h != _height)
 		{
 			// the caller needs to update his buffer... 
-			return Error(_T("SIZE_CHANGED"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+			throw std::exception("SIZE_CHANGED");			
 		}
 		else
-		{			
+		{
 			GLenum glFormat = (format == EPixelFormat::RGB) ? GL_RGB : GL_BGR;
-			glBindTexture(GL_TEXTURE_2D, _glTexture);
+			glBindTexture(GL_TEXTURE_2D, _textureInfo.ID);
 			glEnable(GL_TEXTURE_2D);
-			glGetTexImage(GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, (void *)resultArray);
+			glGetTexImage(GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, buffer);
 			glBindTexture(GL_TEXTURE_2D, 0);
 			glDisable(GL_TEXTURE_2D);
 		}
-	}	
+	}
 	else
 	{
-		return Error(_T("ERROR_SENDER_NOT_FOUND"), __uuidof(ILightjamsSpoutReceiver), E_FAIL);
+		throw std::exception("ERROR_SENDER_NOT_FOUND");		
+	}	
+}
+
+CLightjamsSpoutReceiver::STextureInfo CLightjamsSpoutReceiver::AcquireTexture(GLenum GLformat, unsigned int width, unsigned int height)
+{
+	GLuint texID = 0;
+
+	HGLRC glContext = wglGetCurrentContext();
+	if (glContext == 0)
+	{
+		throw std::exception("ERROR_NO_GL_CONTEXT");
 	}
 
-	return S_OK;
+	ScopedCriticalSection sec(&_texturesLock);
+
+
+	// try to find an existing texture with the same properties...		
+	for (size_t t = 0; t < _textures.size(); ++t)
+	{
+		STextureInfo info = _textures[t];
+		if (info.format == GLformat &&
+			info.width == width &&
+			info.height == height &&
+			info.glContext == glContext)
+		{
+			// found a match! We can use the same texture for multiple receivers
+			// and save some resources this way.
+			return info;
+		}
+	}
+
+	glGenTextures(1, &texID);
+
+	if (texID == 0)
+	{
+		throw std::exception("ERROR_GENERATE_TEXTURE");
+	}
+
+	glBindTexture(GL_TEXTURE_2D, texID);
+	glTexImage2D(GL_TEXTURE_2D, 0, GLformat, width, height, 0, GLformat, GL_UNSIGNED_BYTE, NULL);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	STextureInfo info;
+	info.format = GLformat;
+	info.width = width;
+	info.height = height;
+	info.glContext = glContext;
+	info.ID = texID;
+	_textures.push_back(info);
+
+	return info;
 }
+

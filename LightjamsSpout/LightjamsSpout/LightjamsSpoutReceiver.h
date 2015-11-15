@@ -68,6 +68,7 @@ END_COM_MAP()
 	STDMETHOD(Connect)(BSTR senderName, int *width, int *height, BSTR *realName);
 	STDMETHOD(Disconnect)();
 	STDMETHOD(ReceiveImage)(SAFEARRAY *bytes, EPixelFormat format);
+	STDMETHOD(ReceiveImageIntPtr)(LONG_PTR bitmapIntPtr, EPixelFormat format);
 
 	DECLARE_PROTECT_FINAL_CONSTRUCT()
 
@@ -83,14 +84,57 @@ END_COM_MAP()
 public:
 
 private:
-	void InitOpenGL();
-	void InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height);
+
+	class ScopedCriticalSection
+	{
+	public:
+		ScopedCriticalSection(LPCRITICAL_SECTION handle)
+		{
+			_handle = handle;
+			EnterCriticalSection(handle);
+		}
+
+		~ScopedCriticalSection()
+		{
+			LeaveCriticalSection(_handle);
+		}
+
+	private:
+		LPCRITICAL_SECTION  _handle;
+	};
+	
+	struct STextureInfo
+	{
+		STextureInfo() : 
+			glContext(0), ID(0)
+		{}
+
+		HGLRC glContext;
+		GLuint ID;
+		int width, height;
+		GLenum format;
+	};
+	
+	STextureInfo AcquireTexture(GLenum GLformat, unsigned int width, unsigned int height);	
+	void ReceiveImage(void* buffer, EPixelFormat format);	
 
 	SpoutReceiver _receiver;
 	bool _isCreated;
 	int _width, _height;	
-	char _senderName[256];
-	GLuint _glTexture;
+	char _senderName[256];	
+	STextureInfo _textureInfo;
+
+	// Reuse textures across receivers to save resources
+	static CRITICAL_SECTION _texturesLock;
+	static std::vector<STextureInfo> _textures;	
+
+	static CRITICAL_SECTION InitCriticalSection()
+	{
+		CRITICAL_SECTION section;
+		InitializeCriticalSectionAndSpinCount(&section, 0x00000400);
+		return section;
+	}
+
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(LightjamsSpoutReceiver), CLightjamsSpoutReceiver)

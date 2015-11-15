@@ -37,6 +37,9 @@
     <ClCompile Include="LightjamsSpout_i.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GLContext.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -60,6 +63,9 @@
     <ClInclude Include="LightjamsSpout_i.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="GLContext.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="LightjamsSpout.rc">
@@ -77,6 +83,9 @@
       <Filter>Resource Files</Filter>
     </None>
     <None Include="LightjamsSpoutReceiver.rgs">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="GLContext.rgs">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>

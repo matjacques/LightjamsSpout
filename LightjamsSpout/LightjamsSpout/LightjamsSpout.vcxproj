@@ -191,10 +191,16 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <RegisterOutput>true</RegisterOutput>
+      <EnableUAC>false</EnableUAC>
     </Link>
     <Lib>
       <TargetMachine>MachineX86</TargetMachine>
     </Lib>
+    <Manifest>
+      <AssemblyIdentity>LightjamsSpout, version=1.0.0.9, type=win32</AssemblyIdentity>
+      <TypeLibraryFile>$(IntDir)LightjamsSpout.tlb</TypeLibraryFile>
+      <ComponentFileName>LightjamsSpout.dll</ComponentFileName>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -229,10 +235,12 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <RegisterOutput>true</RegisterOutput>
+      <EnableUAC>false</EnableUAC>
     </Link>
     <Manifest>
       <TypeLibraryFile>$(IntDir)LightjamsSpout.tlb</TypeLibraryFile>
       <ComponentFileName>LightjamsSpout.dll</ComponentFileName>
+      <AssemblyIdentity>LightjamsSpout, version=1.0.0.9, type=win32</AssemblyIdentity>
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -251,6 +259,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       </PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="GLContext.cpp" />
     <ClCompile Include="LightjamsSpout.cpp" />
     <ClCompile Include="LightjamsSpoutReceiver.cpp" />
     <ClCompile Include="LightjamsSpout_i.c">
@@ -277,6 +286,7 @@
   <ItemGroup>
     <ClInclude Include="compreg.h" />
     <ClInclude Include="dllmain.h" />
+    <ClInclude Include="GLContext.h" />
     <ClInclude Include="LightjamsSpoutReceiver.h" />
     <ClInclude Include="LightjamsSpout_i.h" />
     <ClInclude Include="Resource.h" />
@@ -290,6 +300,7 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="GLContext.rgs" />
     <None Include="LightjamsSpout.def" />
     <None Include="LightjamsSpout.rgs" />
     <None Include="LightjamsSpoutReceiver.rgs" />

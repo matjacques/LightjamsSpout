@@ -4,10 +4,10 @@
 
 
  /* File created by MIDL compiler version 8.00.0603 */
-/* at Sat Nov 14 09:50:21 2015
+/* at Sun Nov 15 14:50:35 2015
  */
 /* Compiler settings for LightjamsSpout.idl:
-    Oicf, W1, Zp8, env=Win64 (32b run), target_arch=AMD64 8.00.0603 
+    Oicf, W1, Zp8, env=Win32 (32b run), target_arch=X86 8.00.0603 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
     VC __declspec() decoration level: 
@@ -52,6 +52,13 @@ typedef interface IComponentRegistrar IComponentRegistrar;
 #endif 	/* __IComponentRegistrar_FWD_DEFINED__ */
 
 
+#ifndef __IGLContext_FWD_DEFINED__
+#define __IGLContext_FWD_DEFINED__
+typedef interface IGLContext IGLContext;
+
+#endif 	/* __IGLContext_FWD_DEFINED__ */
+
+
 #ifndef __ILightjamsSpoutReceiver_FWD_DEFINED__
 #define __ILightjamsSpoutReceiver_FWD_DEFINED__
 typedef interface ILightjamsSpoutReceiver ILightjamsSpoutReceiver;
@@ -81,6 +88,18 @@ typedef struct LightjamsSpoutReceiver LightjamsSpoutReceiver;
 #endif /* __cplusplus */
 
 #endif 	/* __LightjamsSpoutReceiver_FWD_DEFINED__ */
+
+
+#ifndef __GLContext_FWD_DEFINED__
+#define __GLContext_FWD_DEFINED__
+
+#ifdef __cplusplus
+typedef class GLContext GLContext;
+#else
+typedef struct GLContext GLContext;
+#endif /* __cplusplus */
+
+#endif 	/* __GLContext_FWD_DEFINED__ */
 
 
 /* header files for imported files */
@@ -285,6 +304,142 @@ enum EPixelFormat
 extern RPC_IF_HANDLE __MIDL_itf_LightjamsSpout_0000_0001_v0_0_c_ifspec;
 extern RPC_IF_HANDLE __MIDL_itf_LightjamsSpout_0000_0001_v0_0_s_ifspec;
 
+#ifndef __IGLContext_INTERFACE_DEFINED__
+#define __IGLContext_INTERFACE_DEFINED__
+
+/* interface IGLContext */
+/* [unique][nonextensible][dual][uuid][object] */ 
+
+
+EXTERN_C const IID IID_IGLContext;
+
+#if defined(__cplusplus) && !defined(CINTERFACE)
+    
+    MIDL_INTERFACE("67C962BF-9418-4E34-AC62-C15CF8F8388F")
+    IGLContext : public IDispatch
+    {
+    public:
+        virtual /* [helpstring][id] */ HRESULT STDMETHODCALLTYPE Create( void) = 0;
+        
+        virtual /* [helpstring][id] */ HRESULT STDMETHODCALLTYPE Delete( void) = 0;
+        
+    };
+    
+    
+#else 	/* C style interface */
+
+    typedef struct IGLContextVtbl
+    {
+        BEGIN_INTERFACE
+        
+        HRESULT ( STDMETHODCALLTYPE *QueryInterface )( 
+            IGLContext * This,
+            /* [in] */ REFIID riid,
+            /* [annotation][iid_is][out] */ 
+            _COM_Outptr_  void **ppvObject);
+        
+        ULONG ( STDMETHODCALLTYPE *AddRef )( 
+            IGLContext * This);
+        
+        ULONG ( STDMETHODCALLTYPE *Release )( 
+            IGLContext * This);
+        
+        HRESULT ( STDMETHODCALLTYPE *GetTypeInfoCount )( 
+            IGLContext * This,
+            /* [out] */ UINT *pctinfo);
+        
+        HRESULT ( STDMETHODCALLTYPE *GetTypeInfo )( 
+            IGLContext * This,
+            /* [in] */ UINT iTInfo,
+            /* [in] */ LCID lcid,
+            /* [out] */ ITypeInfo **ppTInfo);
+        
+        HRESULT ( STDMETHODCALLTYPE *GetIDsOfNames )( 
+            IGLContext * This,
+            /* [in] */ REFIID riid,
+            /* [size_is][in] */ LPOLESTR *rgszNames,
+            /* [range][in] */ UINT cNames,
+            /* [in] */ LCID lcid,
+            /* [size_is][out] */ DISPID *rgDispId);
+        
+        /* [local] */ HRESULT ( STDMETHODCALLTYPE *Invoke )( 
+            IGLContext * This,
+            /* [annotation][in] */ 
+            _In_  DISPID dispIdMember,
+            /* [annotation][in] */ 
+            _In_  REFIID riid,
+            /* [annotation][in] */ 
+            _In_  LCID lcid,
+            /* [annotation][in] */ 
+            _In_  WORD wFlags,
+            /* [annotation][out][in] */ 
+            _In_  DISPPARAMS *pDispParams,
+            /* [annotation][out] */ 
+            _Out_opt_  VARIANT *pVarResult,
+            /* [annotation][out] */ 
+            _Out_opt_  EXCEPINFO *pExcepInfo,
+            /* [annotation][out] */ 
+            _Out_opt_  UINT *puArgErr);
+        
+        /* [helpstring][id] */ HRESULT ( STDMETHODCALLTYPE *Create )( 
+            IGLContext * This);
+        
+        /* [helpstring][id] */ HRESULT ( STDMETHODCALLTYPE *Delete )( 
+            IGLContext * This);
+        
+        END_INTERFACE
+    } IGLContextVtbl;
+
+    interface IGLContext
+    {
+        CONST_VTBL struct IGLContextVtbl *lpVtbl;
+    };
+
+    
+
+#ifdef COBJMACROS
+
+
+#define IGLContext_QueryInterface(This,riid,ppvObject)	\
+    ( (This)->lpVtbl -> QueryInterface(This,riid,ppvObject) ) 
+
+#define IGLContext_AddRef(This)	\
+    ( (This)->lpVtbl -> AddRef(This) ) 
+
+#define IGLContext_Release(This)	\
+    ( (This)->lpVtbl -> Release(This) ) 
+
+
+#define IGLContext_GetTypeInfoCount(This,pctinfo)	\
+    ( (This)->lpVtbl -> GetTypeInfoCount(This,pctinfo) ) 
+
+#define IGLContext_GetTypeInfo(This,iTInfo,lcid,ppTInfo)	\
+    ( (This)->lpVtbl -> GetTypeInfo(This,iTInfo,lcid,ppTInfo) ) 
+
+#define IGLContext_GetIDsOfNames(This,riid,rgszNames,cNames,lcid,rgDispId)	\
+    ( (This)->lpVtbl -> GetIDsOfNames(This,riid,rgszNames,cNames,lcid,rgDispId) ) 
+
+#define IGLContext_Invoke(This,dispIdMember,riid,lcid,wFlags,pDispParams,pVarResult,pExcepInfo,puArgErr)	\
+    ( (This)->lpVtbl -> Invoke(This,dispIdMember,riid,lcid,wFlags,pDispParams,pVarResult,pExcepInfo,puArgErr) ) 
+
+
+#define IGLContext_Create(This)	\
+    ( (This)->lpVtbl -> Create(This) ) 
+
+#define IGLContext_Delete(This)	\
+    ( (This)->lpVtbl -> Delete(This) ) 
+
+#endif /* COBJMACROS */
+
+
+#endif 	/* C style interface */
+
+
+
+
+#endif 	/* __IGLContext_INTERFACE_DEFINED__ */
+
+
 #ifndef __ILightjamsSpoutReceiver_INTERFACE_DEFINED__
 #define __ILightjamsSpoutReceiver_INTERFACE_DEFINED__
 
@@ -317,6 +472,10 @@ EXTERN_C const IID IID_ILightjamsSpoutReceiver;
         
         virtual /* [helpstring][id] */ HRESULT STDMETHODCALLTYPE ReceiveImage( 
             /* [out][in] */ SAFEARRAY * bytes,
+            /* [in] */ EPixelFormat format) = 0;
+        
+        virtual /* [helpstring][id] */ HRESULT STDMETHODCALLTYPE ReceiveImageIntPtr( 
+            /* [in] */ LONG_PTR bitmapIntPtr,
             /* [in] */ EPixelFormat format) = 0;
         
         virtual /* [id] */ HRESULT STDMETHODCALLTYPE Disconnect( void) = 0;
@@ -402,6 +561,11 @@ EXTERN_C const IID IID_ILightjamsSpoutReceiver;
             /* [out][in] */ SAFEARRAY * bytes,
             /* [in] */ EPixelFormat format);
         
+        /* [helpstring][id] */ HRESULT ( STDMETHODCALLTYPE *ReceiveImageIntPtr )( 
+            ILightjamsSpoutReceiver * This,
+            /* [in] */ LONG_PTR bitmapIntPtr,
+            /* [in] */ EPixelFormat format);
+        
         /* [id] */ HRESULT ( STDMETHODCALLTYPE *Disconnect )( 
             ILightjamsSpoutReceiver * This);
         
@@ -453,6 +617,9 @@ EXTERN_C const IID IID_ILightjamsSpoutReceiver;
 #define ILightjamsSpoutReceiver_ReceiveImage(This,bytes,format)	\
     ( (This)->lpVtbl -> ReceiveImage(This,bytes,format) ) 
 
+#define ILightjamsSpoutReceiver_ReceiveImageIntPtr(This,bitmapIntPtr,format)	\
+    ( (This)->lpVtbl -> ReceiveImageIntPtr(This,bitmapIntPtr,format) ) 
+
 #define ILightjamsSpoutReceiver_Disconnect(This)	\
     ( (This)->lpVtbl -> Disconnect(This) ) 
 
@@ -492,6 +659,14 @@ EXTERN_C const CLSID CLSID_LightjamsSpoutReceiver;
 
 class DECLSPEC_UUID("9DE4149A-24CF-4B37-87EE-399005BC8997")
 LightjamsSpoutReceiver;
+#endif
+
+EXTERN_C const CLSID CLSID_GLContext;
+
+#ifdef __cplusplus
+
+class DECLSPEC_UUID("A613DC0B-B1D6-41C8-B714-4BD7116560EB")
+GLContext;
 #endif
 #endif /* __LightjamsSpoutLib_LIBRARY_DEFINED__ */
 
