@@ -10,17 +10,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="LJSpoutps.def" />
+    <None Include="LightjamsSpoutps.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="LJSpout_i.c">
-      <Filter>Generated Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LJSpout_p.c">
-      <Filter>Generated Files</Filter>
-    </ClCompile>
     <ClCompile Include="dlldata.c">
       <Filter>Generated Files</Filter>
     </ClCompile>
+    <ClCompile Include="LightjamsSpout_i.c" />
+    <ClCompile Include="LightjamsSpout_p.c" />
   </ItemGroup>
 </Project>
