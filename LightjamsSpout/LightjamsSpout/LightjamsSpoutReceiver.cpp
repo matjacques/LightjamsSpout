@@ -29,6 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stdafx.h"
 #include "LightjamsSpoutReceiver.h"
 #include "comutil.h"
+#include <gl/GL.h>
 
 // CLightjamsSpoutReceiver
 
@@ -223,7 +224,7 @@ void CLightjamsSpoutReceiver::ReceiveImage(void* buffer, EPixelFormat format)
 		}
 		else
 		{
-			GLenum glFormat = (format == EPixelFormat::RGB) ? GL_RGB : GL_BGR;
+			GLenum glFormat = (format == EPixelFormat::RGB) ? GL_RGB : GL_BGR_EXT;
 			glBindTexture(GL_TEXTURE_2D, _textureInfo.ID);
 			glEnable(GL_TEXTURE_2D);
 			glGetTexImage(GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, buffer);
