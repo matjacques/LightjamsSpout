@@ -204,8 +204,8 @@ void CLightjamsSpoutReceiver::ReceiveImage(void* buffer, EPixelFormat format)
 
 	if (!_isCreated)
 	{	
-		// the texture's format must be RGB. Creating with BGR gives blank images...
-		_textureInfo = AcquireTexture(GL_RGB, _width, _height);		
+		// Spout uses RGBA internally...
+		_textureInfo = AcquireTexture(GL_RGBA, _width, _height);		
 		
 		if (!_receiver.CreateReceiver(_senderName, w, h))
 		{
