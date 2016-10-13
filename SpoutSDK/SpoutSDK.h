@@ -78,14 +78,14 @@ class SPOUT_DLLEXP Spout {
 	bool UpdateSender  (const char* Sendername, unsigned int width, unsigned int height);
 	void ReleaseSender (DWORD dwMsec = 0);
 	bool SendTexture   (GLuint TextureID, GLuint TextureTarget, unsigned int width, unsigned int height, bool bInvert=true, GLuint HostFBO=0);
-	bool SendImage     (const unsigned char* pixels, unsigned int width, unsigned int height, GLenum glFormat = GL_RGBA, bool bInvert=false, GLuint HostFBO = 0);
+	bool SendImage     (const unsigned char* pixels, unsigned int width, unsigned int height, GLenum glFormat = GL_RGBA, bool bInvert=true, GLuint HostFBO = 0);
 
 	// Receiver
 	bool CreateReceiver (char* Sendername, unsigned int &width, unsigned int &height, bool bUseActive = false);
 	void ReleaseReceiver(); 
 
 	bool ReceiveTexture (char* Sendername, unsigned int &width, unsigned int &height, GLuint TextureID = 0, GLuint TextureTarget = 0, bool bInvert = false, GLuint HostFBO=0);
-	bool ReceiveImage   (char* Sendername, unsigned int &width, unsigned int &height, unsigned char* pixels, GLenum glFormat = GL_RGBA, GLuint HostFBO=0);
+	bool ReceiveImage   (char* Sendername, unsigned int &width, unsigned int &height, unsigned char* pixels, GLenum glFormat = GL_RGBA, bool bInvert = false, GLuint HostFBO=0);
 	bool CheckReceiver	(char* Sendername, unsigned int &width, unsigned int &height, bool &bConnected);
 	bool GetImageSize   (char* sendername, unsigned int &width, unsigned int &height, bool &bMemoryMode);	
 
@@ -113,6 +113,8 @@ class SPOUT_DLLEXP Spout {
 	bool GetSpoutSenderName(char * sendername, int maxchars); // get the global sender name
 	bool IsSpoutInitialized(); // has the class been initialized
 	bool IsBGRAavailable(); // Are bgra extensions supported (in interop class)
+	bool IsPBOavailable(); // Are pbo extensions supported (in interop class)
+	void SetBufferMode(bool bActive); // Set the pbo availability on or off
 
 	// Adapter functions
 	int  GetNumAdapters(); // Get the number of graphics adapters in the system
@@ -138,7 +140,7 @@ class SPOUT_DLLEXP Spout {
 	void UseAccessLocks(bool bUseLocks); // to disable/enable texture access locks in SpoutDirectX.cpp
 	void SpoutCleanUp(bool bExit = false);
 	void CleanSenders();
-
+	int ReportMemory();
 
 /*
 //
@@ -204,6 +206,9 @@ class SPOUT_DLLEXP Spout {
 
 	// Find a file version
 	bool FindFileVersion(const char *filepath, DWORD &versMS, DWORD &versLS);
+
+	// === Testing ===
+	DWORD dwLastFrameNumber;
 
 };
 

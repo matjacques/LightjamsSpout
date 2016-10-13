@@ -58,10 +58,10 @@ class SPOUT_DLLEXP spoutGLDXinterop {
 		// Initialization functions
 		bool LoadGLextensions(); // Load required opengl extensions
 		bool CreateInterop(HWND hWnd, const char* sendername, unsigned int width, unsigned int height, DWORD dwFormat, bool bReceive = true);
-		bool CheckInterop(HWND hWnd); // Check for successful open of the interop
+		// bool CheckInterop(HWND hWnd); // Check for successful open of the interop
 		void CleanupInterop(bool bExit = false); // Cleanup with flag to avoid unknown crash bug
 
-		void setSharedMemoryName(char* sharedMemoryName, bool bReceive = true); 
+		// void setSharedMemoryName(char* sharedMemoryName, bool bReceive = true); 
 		bool getSharedInfo(char* sharedMemoryName, SharedTextureInfo* info);
 		bool setSharedInfo(char* sharedMemoryName, SharedTextureInfo* info);
 		
@@ -71,8 +71,19 @@ class SPOUT_DLLEXP spoutGLDXinterop {
 		bool WriteTexture(ID3D11Texture2D** texture);
 		bool ReadTexture (ID3D11Texture2D** texture);
 
+		bool WriteDX9surface(LPDIRECT3DSURFACE9 source_surface);
+
 		bool WriteTexturePixels(const unsigned char *pixels, unsigned int width, unsigned int height, GLenum glFormat = GL_RGBA, bool bInvert = false, GLuint HostFBO = 0);
-		bool ReadTexturePixels (unsigned char *pixels, unsigned int width, unsigned int height, GLenum glFormat = GL_RGBA, GLuint HostFBO=0);
+		bool ReadTexturePixels (unsigned char *pixels, unsigned int width, unsigned int height, GLenum glFormat = GL_RGBA, bool bInvert = false, GLuint HostFBO=0);
+
+		// PBO functions for external access
+		bool UnloadTexturePixels(GLuint TextureID, GLuint TextureTarget, 
+								 unsigned int width, unsigned int height,
+								 unsigned char *data, GLenum glFormat = GL_RGBA, GLuint HostFBO = 0);
+
+		bool LoadTexturePixels(GLuint TextureID, GLuint TextureTarget, 
+							   unsigned int width, unsigned int height,
+							   const unsigned char *data, GLenum glFormat = GL_RGBA);
 
 		bool InitOpenGL();
 		bool CloseOpenGL();
@@ -96,6 +107,8 @@ class SPOUT_DLLEXP spoutGLDXinterop {
 		bool GetMemoryShareMode();
 		bool SetMemoryShareMode(bool bMem = true);
 		bool IsBGRAavailable(); // are the bgra extensions available
+		bool IsPBOavailable(); // Are pbo extensions supported
+		void SetBufferMode(bool bActive); // Set the pbo availability on or off
 
 		D3DFORMAT DX9format; // the DX9 texture format to be used
 		void SetDX9format(D3DFORMAT textureformat);
@@ -109,7 +122,7 @@ class SPOUT_DLLEXP spoutGLDXinterop {
 
 		bool CreateDX9interop(unsigned int width, unsigned int height, DWORD dwFormat, bool bReceive = true);
 		bool OpenDirectX9(HWND hWnd); // Initialize and prepare DirectX9
-		void CleanupDX9();
+		void CleanupDX9(bool bExit = false);
 
 		// DX11
 		DXGI_FORMAT	DX11format; // the DX11 texture format to be used
@@ -118,11 +131,11 @@ class SPOUT_DLLEXP spoutGLDXinterop {
 		bool CreateDX11interop(unsigned int width, unsigned int height, DWORD dwFormat, bool bReceive);
 		bool OpenDirectX11(); // Initialize and prepare DirectX11
 		bool DX11available(); // Test for DX11 by attempting to open a device
-		void CleanupDX11();
+		void CleanupDX11(bool bExit = false);
 
 		// Common
 		bool OpenDirectX(HWND hWnd, bool bDX9);
-		void CleanupDirectX();
+		void CleanupDirectX(bool bExit = false);
 		HANDLE LinkGLDXtextures(void* pDXdevice, void* pSharedTexture, HANDLE dxShareHandle, GLuint glTextureID);
 
 		// Utilities
@@ -191,6 +204,7 @@ protected:
 
 		bool m_bInitialized;	  // this instance initialized flag
 		bool m_bExtensionsLoaded; // extensions have been loaded
+		unsigned int m_caps;      // extension capabilities
 		bool m_bFBOavailable;     // fbo extensions available
 		bool m_bBLITavailable;    // fbo blit extensions available
 		bool m_bPBOavailable;     // pbo extensions available
@@ -204,6 +218,11 @@ protected:
 		GLuint            m_TexID;         // Local texture used for memoryshare functions
 		unsigned int      m_TexWidth;      // width and height of local texture
 		unsigned int      m_TexHeight;     // for testing changes of memoryshare sender size
+
+		// PBO support
+		GLuint m_pbo[2];
+		int PboIndex;
+		int NextPboIndex;
 
 		// DX11
 		ID3D11DeviceContext* g_pImmediateContext;
@@ -223,6 +242,7 @@ protected:
 		bool OpenDeviceKey(const char* key, int maxsize, char *description, char *version);
 		void trim(char * s);
 		bool InitTexture(GLuint &texID, GLenum GLformat, unsigned int width, unsigned int height);
+
 
 };
 

@@ -129,8 +129,31 @@
 		04.04.16	- Texture copy functions revised
 					  Changed WriteTexture, ReadTexture and CopyTexture
 					  to always use fbo blit if blit extensions are available
+		19.04.16	- used glTexSubImage2D in WriteTexturePixels and ReadMemory
+		27.04.16	- PBO functions for pixels transfer
+					  LoadTexturePixels and UnloadTexturePixels used if PBO extensions available
+					  in ReadTexturePixels and WriteTexturePixels
+		28.04.16	- variable format for LoadTexturePixels
+		01.05.16	- pbo functions for memoryshare ReadMemory and WriteMemory
+		03.05.16	- SetPBOavailable(true/false) added to enable/disable pbo functions
+		07.05.16	- SetPBOavailable changed to SetBufferMode
+		22.05.16	- CleanupDirectX in interop cleanup
+		09.06.16	- Corrected interop and mutex lock checks for fail in all functions
+		16.06.16	- Added WriteDX9surface
+		18.06.16	- Add invert to ReadTexturePixels
+		23.06.16	- change back to 2.004 logic for mutex and interop lock checks
+					- Mutex or interop lock fail does not mean read failure, but just no access
+					  The current texture is re-used for a missed frame.
+		03.07-16	- Use helper functions for conversion of 64bit HANDLE to unsigned __int32
+					  and unsigned __int32 to 64bit HANDLE
+					  https://msdn.microsoft.com/en-us/library/aa384267%28VS.85%29.aspx
+		09.07-16	- Rebuild with VS2015
+		14.07.16	- CreateDX11interop - release the texture not the device
+		16.07.16	- Added exit flag to CleanupDirectX to avoid releasing device
+					  Added immediatecontext flush to CleanupDX11
+					  Restored wglDXUnregisterObjectNV to SpoutCleanup for DX9
 
- */
+*/
 
 #include "spoutGLDXinterop.h"
 
@@ -147,8 +170,8 @@ spoutGLDXinterop::spoutGLDXinterop() {
 	m_hAccessMutex      = NULL;
 	
 	// DX9
-	m_bUseDX9				= false; // Use DX11 (default false) or DX9 (true)
-	m_bUseMemory			= false; // Memoryshare
+	m_bUseDX9			= false; // Use DX11 (default false) or DX9 (true)
+	m_bUseMemory		= false; // Memoryshare
 	m_pD3D				= NULL;
 	m_pDevice			= NULL;
 	m_dxTexture			= NULL;
@@ -164,6 +187,7 @@ spoutGLDXinterop::spoutGLDXinterop() {
 
 	m_bInitialized		= false;
 	m_bBGRAavailable	= false;
+	
 
 	m_bExtensionsLoaded	= false;
 	m_bFBOavailable		= false;
@@ -190,6 +214,13 @@ spoutGLDXinterop::spoutGLDXinterop() {
 		// If the hardware is not compatible they will simply fail to work
 		m_bUseMemory = false; 
 	}
+
+	// PBO support
+	PboIndex		= 0;
+	NextPboIndex	= 0;
+	m_pbo[0]		= NULL;
+	m_pbo[1]		= NULL;
+	
 
 	// 24.02.16 - max senders - testing only
 	// Retrieve max senders from the registry
@@ -541,11 +572,23 @@ bool spoutGLDXinterop::CreateInterop(HWND hWnd, const char* sendername, unsigned
 
 	// printf("CreateInterop - %dx%d - dwFormat (%d) \n", width, height, dwFormat);
 
+	//
 	// Texture format tests
-	// Compatible formats
-	// DXGI_FORMAT_R8G8B8A8_UNORM; // default DX11 format - not compatible with DX9 (28)
+	//
+	// DX9 compatible formats
+	// DXGI_FORMAT_R8G8B8A8_UNORM; // default DX11 format - compatible with DX9 (28)
 	// DXGI_FORMAT_B8G8R8A8_UNORM; // compatible DX11 format - works with DX9 (87)
 	// DXGI_FORMAT_B8G8R8X8_UNORM; // compatible DX11 format - works with DX9 (88)
+	//
+	// Other formats that work with DX11 but not with DX9
+	// DXGI_FORMAT_R16G16B16A16_FLOAT
+	// DXGI_FORMAT_R16G16B16A16_SNORM
+	// DXGI_FORMAT_R10G10B10A2_UNORM
+	//
+	// To change any of these you can use :
+	//
+	// void spoutGLDXinterop::SetDX11format(DXGI_FORMAT textureformat)
+	//
 	// Allow for compatible DirectX 11 senders (format 87)
 	// And compatible DirectX9 senders D3DFMT_X8R8G8B8 - 22
 	// and the default D3DFMT_A8R8G8B8 - 21
@@ -673,17 +716,20 @@ bool spoutGLDXinterop::CreateInterop(HWND hWnd, const char* sendername, unsigned
 			// TODO - release
 			return false;
 		}
+
 	}
 
 	// printf("CreateInterop 6\n");
 
 	// Set up local values for this instance
 	// Needed for texture read and write size checks
-	m_TextureInfo.width			= (unsigned __int32)width;
-	m_TextureInfo.height		= (unsigned __int32)height;
-	m_TextureInfo.shareHandle	= (unsigned __int32)m_dxShareHandle;
-	m_TextureInfo.format		= format;
-
+	m_TextureInfo.width       = (unsigned __int32)width;
+	m_TextureInfo.height      = (unsigned __int32)height;
+#ifdef _M_X64
+	m_TextureInfo.shareHandle = (unsigned __int32)(HandleToLong(m_dxShareHandle));
+#else
+	m_TextureInfo.shareHandle = (unsigned __int32)m_dxShareHandle;
+#endif
 	// Additional unused fields available
 	// DWORD usage; // texture usage
 	// wchar_t description[128]; // Wyhon compatible description
@@ -704,9 +750,6 @@ bool spoutGLDXinterop::CreateInterop(HWND hWnd, const char* sendername, unsigned
 
 	// Initialize general texture transfer sync mutex - either sender or receiver can do this
 	spoutdx.CreateAccessMutex(sendername, m_hAccessMutex);
-
-	// Now it has initialized OK
-	m_bInitialized = true;
 
 	//
 	// Now we have globals for this instance
@@ -800,9 +843,8 @@ bool spoutGLDXinterop::CreateDX11interop(unsigned int width, unsigned int height
 	
 	// printf("CreateDX11interop(%dx%d, [Format = %d], %d\n", width, height, dwFormat, bReceive);
 
-	// Safety in case of application crash
-	if(g_pd3dDevice != NULL) g_pd3dDevice->Release();
-	g_pSharedTexture = NULL; // Important because mutex locks check for NULL
+	if (g_pSharedTexture != NULL) g_pSharedTexture->Release();
+	g_pSharedTexture = NULL; // Important for checks for NULL
 
 	// Create or use a shared DirectX texture that will be linked to the OpenGL texture
 	// and get it's share handle for sharing textures
@@ -831,7 +873,6 @@ bool spoutGLDXinterop::CreateDX11interop(unsigned int width, unsigned int height
 	// This registers for interop and associates the opengl texture with the dx texture
 	// by calling wglDXRegisterObjectNV which returns a handle to the interop object
 	// (the shared texture) (m_hInteropObject)
-	// printf("CreateDX11interop 2\n");
 	m_hInteropObject = LinkGLDXtextures(g_pd3dDevice, g_pSharedTexture, m_dxShareHandle, m_glTexture); 
 	if(!m_hInteropObject) {
 		printf("    DX11 LinkGLDXtextures failed\n");	
@@ -869,7 +910,7 @@ HANDLE spoutGLDXinterop::LinkGLDXtextures (	void* pDXdevice,
 	}
 
 	if (m_hInteropDevice == NULL) {
-		printf("    LinkGLDXtextures error 1 : could not create interop device from %x\n", pDXdevice);
+		printf("    LinkGLDXtextures error 1 : could not create interop device from pDXdevice\n");
 		return NULL;
 	}
 
@@ -879,7 +920,6 @@ HANDLE spoutGLDXinterop::LinkGLDXtextures (	void* pDXdevice,
 	// and 11 resources is not an error but has no effect.
 	if (!wglDXSetResourceShareHandleNV(pSharedTexture, dxShareHandle)) {
 		printf("    LinkGLDXtextures error 2 : wglDXSetResourceShareHandleNV failed\n");
-		// TODO - release object and device
 		return NULL;
 	}
 
@@ -896,63 +936,60 @@ HANDLE spoutGLDXinterop::LinkGLDXtextures (	void* pDXdevice,
 		// printf("LinkGLDXtextures (%x, %x, %x, %x)\n", pDXdevice, pSharedTexture, dxShareHandle, glTexture);
 		// printf("    m_hInteropDevice = %x\n", m_hInteropDevice);	
 	}
-	else {
-		// printf("    wglDXRegisterObjectNV OK\n");
-	}
 
 	return hInteropObject;
 
 }
 
 
-void spoutGLDXinterop::CleanupDirectX()
+void spoutGLDXinterop::CleanupDirectX(bool bExit)
 {
-	if(m_bUseDX9)
-		CleanupDX9();
+	if (m_bUseDX9)
+		CleanupDX9(bExit);
 	else
-		CleanupDX11();
+		CleanupDX11(bExit);
 }
 
-
-void spoutGLDXinterop::CleanupDX9()
+void spoutGLDXinterop::CleanupDX9(bool bExit)
 {
-	
-	// 01.09.14 - texture release was missing for a receiver - caused a VRAM leak
-	// If an existing texture exists, CreateTexture can fail with and "unknown error"
-	// so delete any existing texture object
-	// 25.08.15 - moved before release of device
-	if (m_dxTexture != NULL) {
-		// DEBUG
-		// Should not be needed because we are not rendering with the texture
-		// https://msdn.microsoft.com/en-us/library/windows/desktop/bb206253%28v=vs.85%29.aspx
-		// m_pDevice->SetTexture(0, NULL);
-		m_dxTexture->Release();
-	}
-	m_dxTexture = NULL;
+	if (m_pD3D != NULL) {
+		// 01.09.14 - texture release was missing for a receiver - caused a VRAM leak
+		// If an existing texture exists, CreateTexture can fail with and "unknown error"
+		// so delete any existing texture object
+		// 25.08.15 - moved before release of device
+		if (m_dxTexture != NULL) {
+			m_dxTexture->Release();
+			m_dxTexture = NULL;
+		}
 
-	// 25.08.15 - release device before the object !
-	if(m_pDevice != NULL) {
-		// printf("Releasing dx device\n");
-		m_pDevice->Release();
+		if (bExit) {
+			// 25.08.15 - release device before the object !
+			if (m_pDevice != NULL)
+				m_pDevice->Release();
+			if (m_pD3D != NULL)
+				m_pD3D->Release();
+			m_pDevice = NULL;
+			m_pD3D = NULL;
+		}
 	}
-
-	if(m_pD3D != NULL) {
-		// printf("Releasing dx object\n");
-		m_pD3D->Release();
-	}
-
-	m_pDevice = NULL;
-	m_pD3D = NULL;
 
 }
 
-void spoutGLDXinterop::CleanupDX11()
+void spoutGLDXinterop::CleanupDX11(bool bExit)
 {
-	if(g_pSharedTexture != NULL) g_pSharedTexture->Release();
-	if(g_pd3dDevice != NULL) g_pd3dDevice->Release();
-	g_pSharedTexture = NULL; // Important because mutex locks check for NULL
-	g_pd3dDevice = NULL;
-
+	if (g_pd3dDevice != NULL) {
+		if (!g_pImmediateContext) g_pd3dDevice->GetImmediateContext(&g_pImmediateContext);
+		if (g_pSharedTexture != NULL) {
+			g_pSharedTexture->Release();
+			// 14.07.16 - flush is needed or there is a GPU memory leak
+			if (g_pImmediateContext) g_pImmediateContext->Flush();
+			g_pSharedTexture = NULL;
+		}
+		if (bExit) {
+			g_pd3dDevice->Release();
+			g_pd3dDevice = NULL;
+		}
+	}
 }
 
 
@@ -963,76 +1000,48 @@ void spoutGLDXinterop::CleanupDX11()
 void spoutGLDXinterop::CleanupInterop(bool bExit)
 {
 	HGLRC ctx = wglGetCurrentContext();
-	
-	// printf("CleanupInterop\n");
-
-	// DEBUG
-	// printf("CleanupInterop(%d) - ctx = %x\n", bExit, ctx);
-	// int nCurAvailMemoryInKB = 0;
-	// glGetIntegerv(0x9049, &nCurAvailMemoryInKB);
-	// printf("GPU memory 1 : [%i]\n", nCurAvailMemoryInKB);
-	
 
 	// Some of these things need an opengl context so check
-	if(ctx != NULL) {
+	if (ctx != NULL) {
 		// Problem here on exit, but not on change of resolution while the program is running !?
-		//
-		// Problem noted with DirectX 9 if the same shared texture is re-initialized
-		// Not a problem with DirectX 11 - this is a workaround just to avoid the issue
-		// As yet unidentified
-		if(!m_bUseDX9) {
-			if(!bExit && m_hInteropDevice != NULL && m_hInteropObject != NULL) {
-				// printf("    wglDXUnregisterObjectNV\n");
+		if (!bExit) {
+			if (m_hInteropDevice != NULL && m_hInteropObject != NULL) {
 				wglDXUnregisterObjectNV(m_hInteropDevice, m_hInteropObject);
 				m_hInteropObject = NULL;
 			}
 		}
-		m_hInteropObject = NULL;
 
 		if (m_hInteropDevice != NULL) {
-			// printf("    wglDXCloseDeviceNV\n");
 			wglDXCloseDeviceNV(m_hInteropDevice);
 			m_hInteropDevice = NULL;
 		}
-		m_hInteropDevice = NULL;
 
-		if(m_fbo) {
+		if (m_fbo) {
 			// Delete the fbo before the texture so that any texture attachment 
 			// is released even though it should have been
-			// printf("    glDeleteFramebuffersEXT\n");
 			glDeleteFramebuffersEXT(1, &m_fbo);
 			m_fbo = 0;
 		}
-		if(m_glTexture)	{
-			// printf("    glDeleteTextures\n");
+
+		if (m_pbo[0]) {
+			glDeleteBuffersEXT(2, m_pbo);
+			m_pbo[0] = NULL;
+		}
+
+		if (m_glTexture) {
 			glDeleteTextures(1, &m_glTexture);
 			m_glTexture = 0;
 		}
-		if(m_TexID)	{
-			// printf("    glDeleteTextures\n");
+
+		if (m_TexID) {
 			glDeleteTextures(1, &m_TexID);
 			m_TexID = 0;
 			m_TexWidth = 0;
 			m_TexHeight = 0;
 		}
 	} // endif there is an opengl context
-	/*
-	else {
-		printf("CleanupInterop(%d) - no context\n", bExit);
-		printf("    m_hInteropObject = (%d)\n", m_hInteropObject);
-		printf("    m_hInteropDevice = (%d)\n", m_hInteropDevice);
-		printf("    m_fbo = (%d)\n", m_fbo);
-		printf("    m_glTexture = (%d)\n", m_glTexture);
-	}
-	*/
 
-	/*
-	glGetIntegerv(0x9049, &nCurAvailMemoryInKB);
-	// printf("GPU memory 2 : [%i]\n", nCurAvailMemoryInKB);
-	CleanupDirectX();
-	glGetIntegerv(0x9049, &nCurAvailMemoryInKB);
-	// printf("GPU memory 3 : [%i]\n", nCurAvailMemoryInKB);
-	*/
+	CleanupDirectX(bExit);
 
 	// Close general texture access mutex
 	spoutdx.CloseAccessMutex(m_hAccessMutex);
@@ -1047,23 +1056,21 @@ void spoutGLDXinterop::CleanupInterop(bool bExit)
 //
 bool spoutGLDXinterop::LoadGLextensions() 
 {
-	unsigned int caps = 0;
-
-	caps = loadGLextensions(); // in spoutGLextensions
+	m_caps = loadGLextensions(); // in spoutGLextensions
 
 	char buffer [33];
-	_itoa_s(caps, buffer, 2);
+	_itoa_s(m_caps, buffer, 2);
 
-	if(caps == 0) {
+	if(m_caps == 0) {
 		return false;
 	}
 
-	if(caps & GLEXT_SUPPORT_FBO) m_bFBOavailable = true;
-	if(caps & GLEXT_SUPPORT_FBO_BLIT) m_bBLITavailable = true;
-	if(caps & GLEXT_SUPPORT_PBO) m_bPBOavailable = true;
-	if(caps & GLEXT_SUPPORT_SWAP) m_bSWAPavailable = true;
-	if(caps & GLEXT_SUPPORT_BGRA) m_bBGRAavailable = true;
-	if(caps & GLEXT_SUPPORT_NVINTEROP) m_bGLDXavailable = true;
+	if(m_caps & GLEXT_SUPPORT_FBO) m_bFBOavailable = true;
+	if(m_caps & GLEXT_SUPPORT_FBO_BLIT) m_bBLITavailable = true;
+	// GLEXT_SUPPORT_PBO - set by SetBufferMode()
+	if(m_caps & GLEXT_SUPPORT_SWAP) m_bSWAPavailable = true;
+	if(m_caps & GLEXT_SUPPORT_BGRA) m_bBGRAavailable = true;
+	if(m_caps & GLEXT_SUPPORT_NVINTEROP) m_bGLDXavailable = true;
 
 	// If the GL/DX extensions failed to load, then it has to be memoryshare
 	if(!m_bGLDXavailable) {
@@ -1084,6 +1091,38 @@ bool spoutGLDXinterop::IsBGRAavailable()
 	return m_bBGRAavailable;
 }
 
+bool spoutGLDXinterop::IsPBOavailable()
+{
+	return m_bPBOavailable;
+}
+
+
+// Switch pbo functions on or off (default is off).
+// Cannot over-ride extension availability.
+// Will fail silently if extensions are not loaded
+// or PBO functions are not supported
+void spoutGLDXinterop::SetBufferMode(bool bActive)
+{
+	if(!m_bExtensionsLoaded) m_bExtensionsLoaded = LoadGLextensions();
+	if(m_bExtensionsLoaded) {
+		if(bActive) {
+			if(m_caps & GLEXT_SUPPORT_PBO) {
+				// printf("set PBO true\n");
+				m_bPBOavailable = true;
+			}
+		}
+		else {
+			// printf("set PBO false\n");
+			m_bPBOavailable = false;
+		}
+	}
+	// Write to the registry now - this function is called by the SpoutDirectX utility when it starts
+	spoutdx.WriteDwordToRegistry((DWORD)m_bPBOavailable, "Software\\Leading Edge\\Spout", "Buffering");
+
+}
+
+
+
 // 03.09.14 - MB mods for names map class
 bool spoutGLDXinterop::getSharedTextureInfo(const char* sharedMemoryName) {
 
@@ -1100,7 +1139,12 @@ bool spoutGLDXinterop::getSharedTextureInfo(const char* sharedMemoryName) {
 	m_dxShareHandle = (HANDLE)handle;
 	m_TextureInfo.width = w;
 	m_TextureInfo.height = h;
-	m_TextureInfo.shareHandle = (__int32)handle;
+#ifdef _M_X64
+	m_TextureInfo.shareHandle = (unsigned __int32)(HandleToLong(handle));
+#else
+	m_TextureInfo.shareHandle = (unsigned __int32)handle;
+#endif
+	// m_TextureInfo.shareHandle = (__int32)handle;
 	m_TextureInfo.format = format;
 
 	return true;
@@ -1142,7 +1186,12 @@ bool spoutGLDXinterop::setSharedInfo(char* sharedMemoryName, SharedTextureInfo* 
 {
 	m_TextureInfo.width			= info->width;
 	m_TextureInfo.height		= info->height;
-	m_dxShareHandle				= (HANDLE)info->shareHandle; 
+#ifdef _M_X64
+	m_dxShareHandle = (HANDLE)(LongToHandle((long)info->shareHandle));
+#else
+	m_dxShareHandle = (HANDLE)info->shareHandle;
+#endif	
+	// m_dxShareHandle				= (HANDLE)info->shareHandle; 
 	// the local info structure handle "m_TextureInfo.shareHandle" gets converted 
 	// into (unsigned __int32) from "m_dxShareHandle" by setSharedTextureInfo
 	if(setSharedTextureInfo(sharedMemoryName)) {
@@ -1293,13 +1342,18 @@ bool spoutGLDXinterop::DrawToSharedTexture(GLuint TextureID, GLuint TextureTarge
 
 			// restore the previous fbo - default is 0
 			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
-
 			UnlockInteropObject(m_hInteropDevice, &m_hInteropObject);
+			// 23.06.16 - change back to 2.004 logic
+			// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+			// return true;
 		}
 	}
 	spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
 
+	// 23.06.16 - change back to 2.004 logic
 	return true;
+	// return false;
+
 }
 
 //
@@ -1308,10 +1362,10 @@ bool spoutGLDXinterop::DrawToSharedTexture(GLuint TextureID, GLuint TextureTarge
 bool spoutGLDXinterop::DrawSharedTexture(float max_x, float max_y, float aspect, bool bInvert)
 {
 
+	// printf("spoutGLDXinterop::DrawSharedTexture %f, %f, %f, %f)\n", max_x, max_y, aspect, bInvert);
+
 	if(m_hInteropDevice == NULL || m_hInteropObject == NULL)
 		return false;
-
-	// printf("spoutGLDXinterop::DrawSharedTexture - bInvert = %d\n", bInvert);
 
 	// Wait for access to the texture
 	if(spoutdx.CheckAccess(m_hAccessMutex)) {
@@ -1346,13 +1400,20 @@ bool spoutGLDXinterop::DrawSharedTexture(float max_x, float max_y, float aspect,
 
 			// unlock dx object
 			UnlockInteropObject(m_hInteropDevice, &m_hInteropObject);
-			
+
+			// 23.06.16 - change back to 2.004 logic
+			// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+			// return true;
+
 			// drop through to manage events and return true;
-		} // if lock failed just keep going
-	}
+		} // lock failed
+	} // mutex lock failed
+
 	spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
 
+	// 23.06.16 - change back to 2.004 logic
 	return true;
+	// return false;
 
 } // end DrawSharedTexture
 
@@ -1375,14 +1436,24 @@ bool spoutGLDXinterop::WriteTexturePixels(const unsigned char *pixels,
 	// printf("WriteTexturePixels(%d, %d) - format = %x, invert = %d\n", width, height, glFormat, bInvert);
 
 	// Create a local rgba buffer texture if not yet created
-	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) 
+	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) { 
 		InitTexture(m_TexID, GL_RGBA, width, height);
+		m_TexWidth = width;
+		m_TexHeight = height;
+	}
 
 	// Transfer the pixels to the local rgba texture
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glBindTexture(GL_TEXTURE_2D, m_TexID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, glformat, GL_UNSIGNED_BYTE, pixels); 
-	glBindTexture(GL_TEXTURE_2D, 0);
+
+	// Use PBO if supported
+	if(IsPBOavailable()) {
+		LoadTexturePixels(m_TexID, GL_TEXTURE_2D, width, height, pixels, glFormat);
+	}
+	else {
+		glBindTexture(GL_TEXTURE_2D, m_TexID);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, glformat, GL_UNSIGNED_BYTE, (GLvoid *)pixels);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
 	// Write the local texture to the shared texture and invert if necessary
@@ -1392,6 +1463,83 @@ bool spoutGLDXinterop::WriteTexturePixels(const unsigned char *pixels,
 
 } // end WriteTexturePixels
 
+//
+// PBO notes : https://www.seas.upenn.edu/~pcozzi/OpenGLInsights/OpenGLInsights-AsynchronousBufferTransfers.pdf
+//
+// glMapBuffer / glUnmapBuffer - GL_STREAM_DRAW - pinned
+//
+// Pinned memory is standard CPU memory and there is no actual transfer
+// to de - vice memory : in this case, the device will use data directly
+// from this memory location. The PCI-e bus can access data faster than
+// the device is able to render it.
+//
+// COPY IMAGE PIXELS TO A TEXTURE
+//
+//
+// Streaming Texture Upload
+//
+// From : http://www.songho.ca/opengl/gl_pbo.html
+//
+// No FBO used so none has to be passed
+//
+bool spoutGLDXinterop::LoadTexturePixels(GLuint TextureID, GLuint TextureTarget, 
+										 unsigned int width, unsigned int height, 
+										 const unsigned char *data, GLenum glFormat)
+{
+	void *pboMemory = NULL;
+	int channels = 4; // RGBA or RGB
+
+	if(TextureID == 0 || data == NULL)
+		return false;
+
+	if(glFormat == GL_RGB || glFormat == GL_BGR_EXT) 
+		channels = 3;
+
+	if(m_fbo == 0) {
+		glGenFramebuffersEXT(1, &m_fbo); 
+	}
+
+	// Create pbos if not already
+	if(!m_pbo[0]) glGenBuffersEXT(2, m_pbo);
+
+	PboIndex = (PboIndex + 1) % 2;
+	NextPboIndex = (PboIndex + 1) % 2;
+
+	// Bind the texture and PBO
+	glBindTexture(TextureTarget, TextureID);
+	glBindBufferEXT(GL_PIXEL_UNPACK_BUFFER, m_pbo[PboIndex]);
+
+	// Copy pixels from PBO to the texture - use offset instead of pointer.
+	glTexSubImage2D(TextureTarget, 0, 0, 0, width, height, glFormat, GL_UNSIGNED_BYTE, 0);
+
+	// Bind PBO to update the texture
+	glBindBufferEXT(GL_PIXEL_UNPACK_BUFFER, m_pbo[NextPboIndex]);
+
+	// Call glBufferData() with a NULL pointer to clear the PBO data and avoid a stall.
+	// See more : https://www.seas.upenn.edu/~pcozzi/OpenGLInsights/OpenGLInsights-AsynchronousBufferTransfers.pdf
+	// 28.3.2 Buffer Respecification (Orphaning)
+	//
+	glBufferDataEXT(GL_PIXEL_UNPACK_BUFFER, width*height*channels, 0, GL_STREAM_DRAW);
+
+	// Map the buffer object into client's memory
+	pboMemory = (void *)glMapBufferEXT(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+	GLerror(); // soak up the error for Processing - only happens once
+	if(pboMemory) {
+		// Update data directly on the mapped buffer
+		CopyMemory(pboMemory, (void *)data, width*height*channels);
+		glUnmapBufferEXT(GL_PIXEL_UNPACK_BUFFER); // release the mapped buffer
+	}
+	else {
+		glBindBufferEXT(GL_PIXEL_UNPACK_BUFFER, 0);
+		return false;
+	}
+
+	// Release PBOs
+	glBindBufferEXT(GL_PIXEL_UNPACK_BUFFER, 0);
+
+	return true;
+
+}
 
 
 //
@@ -1464,23 +1612,25 @@ bool spoutGLDXinterop::WriteTexture(GLuint TextureID, GLuint TextureTarget, unsi
 			// restore the previous fbo - default is 0
 			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
 
-			// unbind the shared texture
-			glBindTexture(GL_TEXTURE_2D, 0);
-
 			// unlock dx object
 			UnlockInteropObject(m_hInteropDevice, &m_hInteropObject);
+			// 23.06.16 - change back to 2.004 logic
+			// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+			// return true;
+
 		}
-		spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
-		return true;
+		// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+		// return true;
 
 	}
-	else {
-		// printf("WriteTexture - no access\n");
-	}
+	// else { printf("WriteTexture - no access\n"); }
+
 	// There is no reader
 	spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
 
-	return false;
+	// 23.06.16 - change back to 2.004 logic
+	return true;
+	// return false;
 
 } // end WriteTexture
 
@@ -1498,7 +1648,7 @@ bool spoutGLDXinterop::ReadTexture(GLuint TextureID, GLuint TextureTarget, unsig
 
 		// lock interop
 		if(LockInteropObject(m_hInteropDevice, &m_hInteropObject) == S_OK) {
-			
+
 			// bind the FBO (for both, READ_FRAMEBUFFER_EXT and DRAW_FRAMEBUFFER_EXT)
 			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_fbo);
 
@@ -1549,18 +1699,22 @@ bool spoutGLDXinterop::ReadTexture(GLuint TextureID, GLuint TextureTarget, unsig
 
 			// unlock dx object
 			UnlockInteropObject(m_hInteropDevice, &m_hInteropObject);
+
+			// 23.06.16 - change back to 2.004 logic
+			// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+			// return true;
+
 		}
-		else {
-			// printf("ReadTexture - no lock\n");
-		}
-		spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+		// else { printf("ReadTexture - no lock\n"); }
+		// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
 	}
-	else {
-		// printf("ReadTexture - no access\n");
-	}
+	// else { printf("ReadTexture - no access\n");	}
+
 	spoutdx.AllowAccess(m_hAccessMutex);
 
+	// 23.06.16 - change back to 2.004 logic
 	return true;
+	// return false;
 
 } // end ReadTexture
 
@@ -1623,6 +1777,7 @@ bool spoutGLDXinterop::ReadTexture(ID3D11Texture2D** texture)
 		g_pd3dDevice->GetImmediateContext(&g_pImmediateContext);
 	}
 
+	// LJ - possibly needs LockInteropObject as well
 	if(spoutdx.CheckAccess(m_hAccessMutex)) {
 		g_pImmediateContext->CopyResource(*texture, g_pSharedTexture);
 		spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
@@ -1635,6 +1790,43 @@ bool spoutGLDXinterop::ReadTexture(ID3D11Texture2D** texture)
 } // end ReadTexture
 
 
+//
+// Write a DirectX 9 system memory surface to the shared texture
+// Sizes must be the same.
+bool spoutGLDXinterop::WriteDX9surface(LPDIRECT3DSURFACE9 source_surface)
+{
+	IDirect3DSurface9* texture_surface = NULL;
+	HRESULT hr = 0;
+	bool bRet = false;
+
+	if(m_hInteropDevice == NULL || m_hInteropObject == NULL) return false;
+
+	// Only for DX9 mode
+	if(!source_surface || !GetDX9())
+		return false;
+
+	if(spoutdx.CheckAccess(m_hAccessMutex)) {
+		// Interop lock seems necessary or update is intermittent
+		if(LockInteropObject(m_hInteropDevice, &m_hInteropObject) == S_OK) {
+			hr = m_dxTexture->GetSurfaceLevel(0, &texture_surface); // Spout shared texture surface
+			if(SUCCEEDED(hr)) {
+				// UpdateSurface
+				// https://msdn.microsoft.com/en-us/library/windows/desktop/bb205857%28v=vs.85%29.aspx
+				//    The source surface must have been created with D3DPOOL_SYSTEMMEM.
+				//    The destination surface must have been created with D3DPOOL_DEFAULT.
+				//    Neither surface can be locked or holding an outstanding device context.
+				m_pDevice->UpdateSurface(source_surface, NULL, texture_surface, NULL);
+				bRet = true;
+			}
+			UnlockInteropObject(m_hInteropDevice, &m_hInteropObject);
+		}
+		spoutdx.AllowAccess(m_hAccessMutex);
+	}
+
+	return bRet;
+
+}
+
 
 //
 // COPY THE SHARED TEXTURE TO IMAGE PIXELS
@@ -1643,6 +1835,7 @@ bool spoutGLDXinterop::ReadTexturePixels(unsigned char *pixels,
 										 unsigned int width, 
 										 unsigned int height, 
 										 GLenum glFormat,
+										 bool bInvert, 
 										 GLuint HostFBO)
 {
 	GLenum status;
@@ -1651,56 +1844,155 @@ bool spoutGLDXinterop::ReadTexturePixels(unsigned char *pixels,
 	if(m_hInteropDevice == NULL || m_hInteropObject == NULL) return false;
 	if(width != m_TextureInfo.width || height != m_TextureInfo.height) return false;
 
+	// printf("ReadTexturePixels (%dx%d) - format = %x\n", width, height, glFormat);
+
+	// Create a local rgba buffer texture if not yet created
+	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) { 
+		InitTexture(m_TexID, GL_RGBA, width, height);
+		m_TexWidth = width;
+		m_TexHeight = height;
+	}
+
 	// retrieve opengl texture data directly to image pixels rather than via an fbo and texture
 	// Wait for access to the texture
 	if(spoutdx.CheckAccess(m_hAccessMutex)) {
-		// lock dx object
+		
+		// lock gl/dx interop object
 		if(LockInteropObject(m_hInteropDevice, &m_hInteropObject) == S_OK) {
 
 			// Set single pixel alignment in case of rgb source
 			glPixelStorei(GL_PACK_ALIGNMENT, 1);
-			
-			/*
-			//
-			// glGetTexImage method
-			//
-			glBindTexture(GL_TEXTURE_2D, m_glTexture);
-			glGetTexImage(GL_TEXTURE_2D, 0, glFormat,  GL_UNSIGNED_BYTE, pixels);
-			glBindTexture(GL_TEXTURE_2D, 0);
-			*/
 
-			//
-			// fbo attachment method - current fbo has to be passed in
-			//
-			// Bind our local fbo
-			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_fbo); 
-			// Attach the shared texture to the color buffer in our frame buffer
-			glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, m_glTexture, 0);
-			status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
-			if(status == GL_FRAMEBUFFER_COMPLETE_EXT) {
-				// read the pixels from the framebuffer in the user provided format
-				glReadPixels(0, 0, width, height, glformat, GL_UNSIGNED_BYTE, pixels);
+			// First copy the shared texture to the local texture, inverting if necessary
+			CopyTexture(m_glTexture, GL_TEXTURE_2D, m_TexID, GL_TEXTURE_2D, width, height, bInvert, HostFBO);
+
+			// Then extract the pixels from the local texture - changing to the user passed format
+			// PBO method
+			if(IsPBOavailable()) {
+				UnloadTexturePixels(m_TexID, GL_TEXTURE_2D, width, height, pixels, glFormat, HostFBO);
 			}
 			else {
-				PrintFBOstatus(status);
+
+				// glBindTexture(GL_TEXTURE_2D, m_glTexture);
+				// glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pixels);
+				// glBindTexture(GL_TEXTURE_2D, 0);
+
+				// printf("ReadTexturePixels (%dx%d) - format = %x\n", width, height, glFormat);
+
+				//
+				// fbo attachment method - current fbo has to be passed in
+				//
+				// Bind our local fbo
+				glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_fbo); 
+				// Attach the local rgba texture to the color buffer in our frame buffer
+				glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, m_TexID, 0);
+				status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
+				if(status == GL_FRAMEBUFFER_COMPLETE_EXT) {
+					// read the pixels from the framebuffer in the user provided format
+					glReadPixels(0, 0, width, height, glformat, GL_UNSIGNED_BYTE, pixels);
+				}
+				else {
+					PrintFBOstatus(status);
+				}
+				// restore the previous fbo - default is 0
+				glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
 			}
-
-			// restore the previous fbo - default is 0
-			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
-
+	
 			glPixelStorei(GL_PACK_ALIGNMENT, 4);
 
 			// Unlock interop object
 			UnlockInteropObject(m_hInteropDevice, &m_hInteropObject);
 
-			// drop through to manage events and return true;
-		} // if lock failed just keep going
-	}
-	spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+			// 23.06.16 - change back to 2.004 logic
+			// spoutdx.AllowAccess(m_hAccessMutex); // Allow access to the texture
+			// return true;
+
+		} // interop lock failed
+	} // mutex access failed
+	
+	spoutdx.AllowAccess(m_hAccessMutex);
+
+	// 23.06.16 - change back to 2.004 logic
 	return true;
+	// return false;
 
 } // end ReadTexturePixels 
 
+
+
+//
+// Asynchronous Read-back from a texture
+//
+// Adapted from : http://www.songho.ca/opengl/gl_pbo.html
+//
+bool spoutGLDXinterop::UnloadTexturePixels(GLuint TextureID, GLuint TextureTarget, 
+										   unsigned int width, unsigned int height, 
+										   unsigned char *data, GLenum glFormat, GLuint HostFBO)
+{
+	void *pboMemory = NULL;
+	int channels = 4; // RGBA or RGB
+
+	if(TextureID == 0 || data == NULL)
+		return false;
+
+	if(glFormat == GL_RGB || glFormat == GL_BGR_EXT) 
+		channels = 3;
+
+	// Create pbos if not already
+	if(m_pbo[0] == 0 || m_pbo[1] == 0) {
+		glGenBuffersEXT(2, m_pbo);
+	}
+
+	if(m_fbo == 0) {
+		glGenFramebuffersEXT(1, &m_fbo); 
+	}
+	
+	PboIndex = (PboIndex + 1) % 2;
+	NextPboIndex = (PboIndex + 1) % 2;
+
+	// Attach the texture to an FBO
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, m_fbo);
+	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, TextureTarget, TextureID, 0);
+
+	// Set the target framebuffer to read
+	glReadBuffer(GL_COLOR_ATTACHMENT0_EXT);
+
+	// Bind the PBO
+	glBindBufferEXT(GL_PIXEL_PACK_BUFFER, m_pbo[PboIndex]);
+
+	// Null existing data to avoid a stall
+	glBufferDataEXT(GL_PIXEL_PACK_BUFFER, width*height*channels, 0, GL_STREAM_READ);
+
+	// Read pixels from framebuffer to PBO - glReadPixels() should return immediately.
+	glReadPixels(0, 0, width, height, glFormat, GL_UNSIGNED_BYTE, (GLvoid *)0);
+
+	// Map the PBO to process its data by CPU
+	glBindBufferEXT(GL_PIXEL_PACK_BUFFER, m_pbo[NextPboIndex]);
+
+	// TODO : For some reason, glMapBuffer returns NULL when called the first time
+	// when used with Processing. Not resolved - but it only happens once.
+	pboMemory = glMapBufferEXT(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+	if(pboMemory) {
+		CopyMemory((void *)data, pboMemory, width*height*channels);
+		glUnmapBufferEXT(GL_PIXEL_PACK_BUFFER);
+	}
+	else {
+		GLerror(); // soak up the error for Processing
+		glBindBufferEXT(GL_PIXEL_PACK_BUFFER, 0);
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
+		return false;
+	}
+	
+	// Back to conventional pixel operation
+	glBindBufferEXT(GL_PIXEL_PACK_BUFFER, 0);
+	
+	// Restore the previous fbo binding
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
+
+
+	return true;
+
+}
 
 //
 // BIND THE SHARED TEXTURE
@@ -1803,6 +2095,7 @@ HRESULT spoutGLDXinterop::LockInteropObject(HANDLE hDevice, HANDLE *hObject)
 	HRESULT hr;
 
 	if(hDevice == NULL || hObject == NULL || *hObject == NULL) {
+
 		return E_HANDLE;
 	}
 
@@ -2087,7 +2380,7 @@ bool spoutGLDXinterop::SetVerticalSync(bool bSync)
 void spoutGLDXinterop::GLerror() {
 	GLenum err;
 	while ((err = glGetError()) != GL_NO_ERROR) {
-		printf("GL error = %d (0x%x)\n", err, err);
+		// printf("GL error = %d (0x%x)\n", err, err);
 		// printf("GL error = %d (0x%x) %s\n", err, err, gluErrorString(err));
 	}
 }	
@@ -2142,16 +2435,26 @@ bool spoutGLDXinterop::WriteMemory (GLuint TexID,
 	// printf("spoutGLDXinterop::WriteMemory, %d, %d, [%x], [%x] (bInvert = %d)\n", width, height, TexID, TextureTarget, bInvert);
 
 	// Create a local rgba buffer texture if not yet created
-	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) 
+	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) {
+		// printf("WriteMemory : creating local texture\n");
 		InitTexture(m_TexID, GL_RGBA, width, height);
+		m_TexWidth = width;
+		m_TexHeight = height;
+	}
 
 	// Copy the user texture to the local rgba texture and invert as necessary
 	CopyTexture(TexID, TextureTarget, m_TexID, GL_TEXTURE_2D, width, height, bInvert, HostFBO);
 
 	// Read the local opengl texture into the rgba memory map buffer
-	glBindTexture(GL_TEXTURE_2D, m_TexID);
-	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	// Use PBO if supported
+	if(IsPBOavailable()) {
+		UnloadTexturePixels(m_TexID, GL_TEXTURE_2D, width, height, pBuffer, GL_RGBA, HostFBO);
+	}
+	else {
+		glBindTexture(GL_TEXTURE_2D, m_TexID);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
 	memoryshare.UnlockSenderMemory();
 
@@ -2176,13 +2479,24 @@ bool spoutGLDXinterop::ReadMemory(GLuint TexID,
 
 	// Create a local rgba buffer texture if not yet created
 	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) {
+		// printf("ReadMemory : creating local texture\n");
 		InitTexture(m_TexID, GL_RGBA, width, height);
+		m_TexWidth = width;
+		m_TexHeight = height;
 	}
 
 	// Copy the rgba memory map pixels to the local rgba opengl texture
-	glBindTexture(GL_TEXTURE_2D, m_TexID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer); 
-	glBindTexture(GL_TEXTURE_2D, 0);
+	// Use PBO if supported
+	if(IsPBOavailable()) {
+		// printf("pbo\n");
+		LoadTexturePixels(m_TexID, GL_TEXTURE_2D, width, height, pBuffer, GL_RGBA);
+	}
+	else {
+		// printf("opengl\n");
+		glBindTexture(GL_TEXTURE_2D, m_TexID);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
 	// Copy the local rgba texture to the user texture and invert as necessary
 	CopyTexture(m_TexID, GL_TEXTURE_2D, TexID, TextureTarget, width, height, bInvert, HostFBO);
@@ -2282,7 +2596,7 @@ bool spoutGLDXinterop::FlipBuffer(const unsigned char *src,
 	unsigned char *From, *To;
 	int pitch;
 
-	if(glFormat == GL_RGB)
+	if(glFormat == GL_RGB || glFormat == GL_BGR_EXT)
 		pitch = width*3;
 	else
 		pitch = width*4;
@@ -2373,7 +2687,7 @@ void spoutGLDXinterop::rgba2bgr(void* rgba_buffer, void *rgb_buffer, unsigned in
 }
 
 
-void spoutGLDXinterop::rgba2bgra(void* bgra_buffer, void *rgba_buffer, unsigned int width, unsigned int height, bool bInvert)
+void spoutGLDXinterop::rgba2bgra(void* rgba_buffer, void *bgra_buffer, unsigned int width, unsigned int height, bool bInvert)
 {
 	unsigned char* rgba = (unsigned char *)rgba_buffer; // Pointer To The rgba buffer
     unsigned char* bgra = (unsigned char *)bgra_buffer; // Pointer To The bgra buffer
@@ -2578,7 +2892,7 @@ bool spoutGLDXinterop::CopyTexture(	GLuint SourceID,
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
 
 	// unbind the destination texture
-	glBindTexture(DestTarget, 0);
+	// glBindTexture(DestTarget, 0);
 
 	return true;
 
@@ -2605,8 +2919,11 @@ bool spoutGLDXinterop::DrawToSharedMemory(GLuint TextureID, GLuint TextureTarget
 	if(!pBuffer) return false;
 
 	// Create local buffer texture if not yet created or re-create if the memoryshare size has changed 
-	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) 
+	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) { 
 		InitTexture(m_TexID, GL_RGBA, width, height);
+		m_TexWidth = width;
+		m_TexHeight = height;
+	}
 
 	// Create an fbo if not already
 	if(m_fbo == 0) glGenFramebuffersEXT(1, &m_fbo); 
@@ -2670,9 +2987,15 @@ bool spoutGLDXinterop::DrawToSharedMemory(GLuint TextureID, GLuint TextureTarget
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, HostFBO);
 
 	// Now read the local opengl texture into the memory map buffer
-	glBindTexture(GL_TEXTURE_2D, m_TexID);
-	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	// Use PBO if supported
+	if(IsPBOavailable()) {
+		UnloadTexturePixels(m_TexID, GL_TEXTURE_2D, width, height, pBuffer, GL_RGBA, HostFBO);
+	}
+	else {
+		glBindTexture(GL_TEXTURE_2D, m_TexID);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
 	memoryshare.UnlockSenderMemory();
 
@@ -2686,8 +3009,6 @@ bool spoutGLDXinterop::DrawSharedMemory(float max_x, float max_y, float aspect, 
 {
 	unsigned int width, height;
 
-	// printf("spoutGLDXinterop::DrawMemory, %d, %d, [%x], [%x] (bInvert = %d)\n", width, height, TexID, TextureTarget, bInvert);
-
 	// Get the memoryshare size
 	if(!memoryshare.GetSenderMemorySize(width, height))
 		return false;
@@ -2697,16 +3018,23 @@ bool spoutGLDXinterop::DrawSharedMemory(float max_x, float max_y, float aspect, 
 	if(!pBuffer) return false;
 
 	// Create a local buffer texture if not yet created or re-create if the memoryshare size has changed 
-	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) 
+	if(m_TexID == 0 || width != m_TexWidth || height != m_TexHeight) { 
+		// printf("DrawSharedMemory create local texture\n");
 		InitTexture(m_TexID, GL_RGBA, width, height);
+		m_TexWidth = width;
+		m_TexHeight = height;
+	}
 
-	// Copy the memory map pixels directly to the opengl texture
-	glEnable(GL_TEXTURE_2D);
+	// printf("spoutGLDXinterop::DrawSharedMemory, %dx%d[%x] - %f, %f, %f %d)\n", width, height, m_TexID,  max_x, max_y, aspect, bInvert);
+
 	glBindTexture(GL_TEXTURE_2D, m_TexID);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)pBuffer);
+	glBindTexture(GL_TEXTURE_2D, 0);
 
 	// Draw the texture
 	glColor4f(1.f, 1.f, 1.f, 1.f);
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, m_TexID);
 	glBegin(GL_QUADS);
 	if(bInvert) {
 		glTexCoord2f(0.0,	max_y);	glVertex2f(-aspect,-1.0); // lower left
@@ -2869,3 +3197,12 @@ bool spoutGLDXinterop::CloseOpenGL()
 
 		return false;
 }
+
+/*
+// ======================== TESTING ==========================
+bool IsNewFrameReady()
+{
+	return false;
+		
+}
+*/

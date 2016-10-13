@@ -62,7 +62,7 @@ class SPOUT_DLLEXP spoutDirectX {
 		ID3D11Device* CreateDX11device(); // Create a DX11 device
 		bool CreateSharedDX11Texture(ID3D11Device* pDevice, unsigned int width, unsigned int height, DXGI_FORMAT format, ID3D11Texture2D** pSharedTexture, HANDLE &dxShareHandle);
 		bool OpenDX11shareHandle(ID3D11Device* pDevice, ID3D11Texture2D** ppSharedTexture, HANDLE dxShareHandle);
-		void CloseDX11();
+		// void CloseDX11();
 
 		// Output adapter selection
 		int GetNumAdapters(); // Get the number of graphics adapters in the system
@@ -76,11 +76,11 @@ class SPOUT_DLLEXP spoutDirectX {
 		bool ReadDwordFromRegistry(DWORD *pValue, const char *subkey, const char *valuename);
 		bool WriteDwordToRegistry(DWORD dwValue, const char *subkey, const char *valuename);
 
-		// Mutex locks for DirectX 9 shared texture access
+		// Mutex locks for shared texture access
 		bool CreateAccessMutex(const char *name, HANDLE &hAccessMutex);
 		void CloseAccessMutex(HANDLE &hAccessMutex);
-		bool CheckAccess(HANDLE hAccessMutex, ID3D11Texture2D* pSharedTexture = NULL);
-		void AllowAccess(HANDLE hAccessMutex, ID3D11Texture2D* pSharedTexture = NULL);
+		bool CheckAccess(HANDLE hAccessMutex);
+		void AllowAccess(HANDLE hAccessMutex);
 
 		// For debugging only - to toggle texture access locks disable/enable
 		bool bUseAccessLocks;
