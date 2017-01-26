@@ -1,12 +1,16 @@
 HKCR
 {
+	AtlObjectProgId.1 = s 'CompReg Class'
+    {
+        CLSID = s '{A99139BB-C23B-41FC-B7D5-BE16D564FFC2}'
+    }
 	NoRemove CLSID
 	{
 		ForceRemove {A99139BB-C23B-41FC-B7D5-BE16D564FFC2} = s 'CompReg Class'
 		{
 			InprocServer32 = s '%MODULE%'
 			{
-				val ThreadingModel = s 'Apartment'
+				val ThreadingModel = s 'Free'
 			}
 			TypeLib = s '{E68A5E84-367B-46F2-BB45-EEC2E6C0D62B}'
 			Version = s '1.0'
