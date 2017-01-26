@@ -159,6 +159,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\SpoutCopy.cpp" />
     <ClCompile Include="..\SpoutDirectX.cpp" />
     <ClCompile Include="..\SpoutGLDXinterop.cpp" />
     <ClCompile Include="..\SpoutGLextensions.cpp" />
@@ -172,6 +173,7 @@
   <ItemGroup>
     <ClInclude Include="..\Spout.h" />
     <ClInclude Include="..\SpoutCommon.h" />
+    <ClInclude Include="..\SpoutCopy.h" />
     <ClInclude Include="..\SpoutDirectX.h" />
     <ClInclude Include="..\SpoutGLDXinterop.h" />
     <ClInclude Include="..\SpoutGLextensions.h" />
